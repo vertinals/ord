@@ -1644,9 +1644,17 @@ mod tests {
 
   #[tokio::test]
   async fn home_block_limit_foo() {
-    let test_server = TestServer::new();
-
-    test_server.mine_blocks(101);
+    let args = format!(
+        "ord --chain regtest --rpc-url {} --cookie-file {} --data-dir {} {config_args} {} server --http-port {} --address 127.0.0.1 {}",
+        bitcoin_rpc_server.url(),
+        cookiefile.to_str().unwrap(),
+        tempdir.path().to_str().unwrap(),
+        ord_args.join(" "),
+        port,
+        server_args.join(" "),
+      );
+    let (options, server) = parse_server_args(args);
+    tokio::spawn(async { server.async_run(options, index, handle).await });
 
     let index = Extension(test_server.index.clone());
     let page_config = Extension(Arc::new(PageConfig {
