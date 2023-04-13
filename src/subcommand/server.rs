@@ -125,110 +125,117 @@ pub(crate) struct Server {
 
 impl Server {
   pub(crate) fn run(self, options: Options, index: Arc<Index>, handle: Handle) -> Result {
-    Runtime::new()?.block_on(async {
-      let clone = index.clone();
-      thread::spawn(move || loop {
-        if let Err(error) = clone.update() {
-          log::warn!("{error}");
-        }
-        thread::sleep(Duration::from_millis(5000));
-      });
+    Runtime::new()?.block_on(self.async_run(options, index, handle))
+  }
 
-      let config = options.load_config()?;
-      let acme_domains = self.acme_domains()?;
-
-      let page_config = Arc::new(PageConfig {
-        chain: options.chain(),
-        domain: acme_domains.first().cloned(),
-      });
-
-      let router = Router::new()
-        .route("/", get(Self::home))
-        .route("/block-count", get(Self::block_count))
-        .route("/block/:query", get(Self::block))
-        .route("/bounties", get(Self::bounties))
-        .route("/clock", get(Self::clock))
-        .route("/content/:inscription_id", get(Self::content))
-        .route("/faq", get(Self::faq))
-        .route("/favicon.ico", get(Self::favicon))
-        .route("/feed.xml", get(Self::feed))
-        .route("/input/:block/:transaction/:input", get(Self::input))
-        .route("/inscription/:inscription_id", get(Self::inscription))
-        .route("/inscriptions", get(Self::inscriptions))
-        .route("/inscriptions/:from", get(Self::inscriptions_from))
-        .route("/install.sh", get(Self::install_script))
-        .route("/ordinal/:sat", get(Self::ordinal))
-        .route("/output/:output", get(Self::output))
-        .route("/preview/:inscription_id", get(Self::preview))
-        .route("/range/:start/:end", get(Self::range))
-        .route("/rare.txt", get(Self::rare_txt))
-        .route("/sat/:sat", get(Self::sat))
-        .route("/search", get(Self::search_by_query))
-        .route("/search/:query", get(Self::search_by_path))
-        .route("/static/*path", get(Self::static_asset))
-        .route("/status", get(Self::status))
-        .route("/tx/:txid", get(Self::transaction))
-        .layer(Extension(index))
-        .layer(Extension(page_config))
-        .layer(Extension(Arc::new(config)))
-        .layer(SetResponseHeaderLayer::if_not_present(
-          header::CONTENT_SECURITY_POLICY,
-          HeaderValue::from_static("default-src 'self'"),
-        ))
-        .layer(SetResponseHeaderLayer::overriding(
-          header::STRICT_TRANSPORT_SECURITY,
-          HeaderValue::from_static("max-age=31536000; includeSubDomains; preload"),
-        ))
-        .layer(
-          CorsLayer::new()
-            .allow_methods([http::Method::GET])
-            .allow_origin(Any),
-        )
-        .layer(CompressionLayer::new());
-
-      match (self.http_port(), self.https_port()) {
-        (Some(http_port), None) => {
-          self
-            .spawn(router, handle, http_port, SpawnConfig::Http)?
-            .await??
-        }
-        (None, Some(https_port)) => {
-          self
-            .spawn(
-              router,
-              handle,
-              https_port,
-              SpawnConfig::Https(self.acceptor(&options)?),
-            )?
-            .await??
-        }
-        (Some(http_port), Some(https_port)) => {
-          let http_spawn_config = if self.redirect_http_to_https {
-            SpawnConfig::Redirect(if https_port == 443 {
-              format!("https://{}", acme_domains[0])
-            } else {
-              format!("https://{}:{https_port}", acme_domains[0])
-            })
-          } else {
-            SpawnConfig::Http
-          };
-
-          let (http_result, https_result) = tokio::join!(
-            self.spawn(router.clone(), handle.clone(), http_port, http_spawn_config)?,
-            self.spawn(
-              router,
-              handle,
-              https_port,
-              SpawnConfig::Https(self.acceptor(&options)?),
-            )?
-          );
-          http_result.and(https_result)??;
-        }
-        (None, None) => unreachable!(),
+  pub(crate) async fn async_run(
+    self,
+    options: Options,
+    index: Arc<Index>,
+    handle: Handle,
+  ) -> Result {
+    let clone = index.clone();
+    thread::spawn(move || loop {
+      if let Err(error) = clone.update() {
+        log::warn!("{error}");
       }
+      thread::sleep(Duration::from_millis(5000));
+    });
 
-      Ok(())
-    })
+    let config = options.load_config()?;
+    let acme_domains = self.acme_domains()?;
+
+    let page_config = Arc::new(PageConfig {
+      chain: options.chain(),
+      domain: acme_domains.first().cloned(),
+    });
+
+    let router = Router::new()
+      .route("/", get(Self::home))
+      .route("/block-count", get(Self::block_count))
+      .route("/block/:query", get(Self::block))
+      .route("/bounties", get(Self::bounties))
+      .route("/clock", get(Self::clock))
+      .route("/content/:inscription_id", get(Self::content))
+      .route("/faq", get(Self::faq))
+      .route("/favicon.ico", get(Self::favicon))
+      .route("/feed.xml", get(Self::feed))
+      .route("/input/:block/:transaction/:input", get(Self::input))
+      .route("/inscription/:inscription_id", get(Self::inscription))
+      .route("/inscriptions", get(Self::inscriptions))
+      .route("/inscriptions/:from", get(Self::inscriptions_from))
+      .route("/install.sh", get(Self::install_script))
+      .route("/ordinal/:sat", get(Self::ordinal))
+      .route("/output/:output", get(Self::output))
+      .route("/preview/:inscription_id", get(Self::preview))
+      .route("/range/:start/:end", get(Self::range))
+      .route("/rare.txt", get(Self::rare_txt))
+      .route("/sat/:sat", get(Self::sat))
+      .route("/search", get(Self::search_by_query))
+      .route("/search/:query", get(Self::search_by_path))
+      .route("/static/*path", get(Self::static_asset))
+      .route("/status", get(Self::status))
+      .route("/tx/:txid", get(Self::transaction))
+      .layer(Extension(index))
+      .layer(Extension(page_config))
+      .layer(Extension(Arc::new(config)))
+      .layer(SetResponseHeaderLayer::if_not_present(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("default-src 'self'"),
+      ))
+      .layer(SetResponseHeaderLayer::overriding(
+        header::STRICT_TRANSPORT_SECURITY,
+        HeaderValue::from_static("max-age=31536000; includeSubDomains; preload"),
+      ))
+      .layer(
+        CorsLayer::new()
+          .allow_methods([http::Method::GET])
+          .allow_origin(Any),
+      )
+      .layer(CompressionLayer::new());
+
+    match (self.http_port(), self.https_port()) {
+      (Some(http_port), None) => {
+        self
+          .spawn(router, handle, http_port, SpawnConfig::Http)?
+          .await??
+      }
+      (None, Some(https_port)) => {
+        self
+          .spawn(
+            router,
+            handle,
+            https_port,
+            SpawnConfig::Https(self.acceptor(&options)?),
+          )?
+          .await??
+      }
+      (Some(http_port), Some(https_port)) => {
+        let http_spawn_config = if self.redirect_http_to_https {
+          SpawnConfig::Redirect(if https_port == 443 {
+            format!("https://{}", acme_domains[0])
+          } else {
+            format!("https://{}:{https_port}", acme_domains[0])
+          })
+        } else {
+          SpawnConfig::Http
+        };
+
+        let (http_result, https_result) = tokio::join!(
+          self.spawn(router.clone(), handle.clone(), http_port, http_spawn_config)?,
+          self.spawn(
+            router,
+            handle,
+            https_port,
+            SpawnConfig::Https(self.acceptor(&options)?),
+          )?
+        );
+        http_result.and(https_result)??;
+      }
+      (None, None) => unreachable!(),
+    }
+
+    Ok(())
   }
 
   fn spawn(
@@ -917,7 +924,7 @@ mod tests {
 
   struct TestServer {
     bitcoin_rpc_server: test_bitcoincore_rpc::Handle,
-    index: Arc<Index>,
+    pub(super) index: Arc<Index>,
     ord_server_handle: Handle,
     url: Url,
     #[allow(unused)]
@@ -1633,6 +1640,23 @@ mod tests {
       // ".*<ol start=101 reversed class=blocks>\n(    <li><a href=/block/[[:xdigit:]]{64}>[[:xdigit:]]{64}</a></li>\n){100}</ol>.*"
       ".*<ol start=101 reversed class=blocks>.*</ol>.*",
     );
+  }
+
+  #[tokio::test]
+  async fn home_block_limit_foo() {
+    let test_server = TestServer::new();
+
+    test_server.mine_blocks(101);
+
+    let index = Extension(test_server.index.clone());
+    let page_config = Extension(Arc::new(PageConfig {
+      chain: Chain::Regtest,
+      domain: None,
+    }));
+
+    let home_html = Server::home(page_config, index).await.unwrap().content;
+
+    assert_eq!(home_html.last, 101);
   }
 
   #[test]

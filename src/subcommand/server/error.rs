@@ -1,5 +1,6 @@
 use super::*;
 
+#[derive(Debug)]
 pub(super) enum ServerError {
   Internal(Error),
   BadRequest(String),

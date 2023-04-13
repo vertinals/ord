@@ -36,7 +36,7 @@ mod transaction;
 
 #[derive(Boilerplate)]
 pub(crate) struct PageHtml<T: PageContent> {
-  content: T,
+  pub(crate) content: T,
   has_sat_index: bool,
   page_config: Arc<PageConfig>,
 }

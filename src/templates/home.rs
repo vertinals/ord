@@ -2,9 +2,9 @@ use super::*;
 
 #[derive(Boilerplate)]
 pub(crate) struct HomeHtml {
-  last: u64,
-  blocks: Vec<BlockHash>,
-  inscriptions: Vec<InscriptionId>,
+  pub(crate) last: u64,
+  pub(crate) blocks: Vec<BlockHash>,
+  pub(crate) inscriptions: Vec<InscriptionId>,
 }
 
 impl HomeHtml {
