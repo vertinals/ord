@@ -1,4 +1,4 @@
-use {super::*, inscription::Curse};
+use super::*;
 
 #[derive(Debug, Clone)]
 pub(super) struct Flotsam {
@@ -167,13 +167,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           index: id_counter,
         };
 
-        let curse = if inscription.inscription.unrecognized_even_field {
-          Some(Curse::UnrecognizedEvenField)
-        } else if inscription.tx_in_index != 0 {
-          Some(Curse::NotInFirstInput)
-        } else if inscription.tx_in_offset != 0 {
-          Some(Curse::NotAtOffsetZero)
-        } else if inscribed_offsets.contains_key(&offset) {
+        if inscribed_offsets.contains_key(&offset) {
           let seq_num = self.reinscription_id_to_seq_num.len()?;
 
           let sat = Self::calculate_sat(input_sat_ranges, offset);
@@ -183,51 +177,15 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           self
             .reinscription_id_to_seq_num
             .insert(&inscription_id.store(), seq_num)?;
-
-          Some(Curse::Reinscription)
-        } else {
-          None
-        };
-
-        if curse.is_some() {
-          log::info!("found cursed inscription {inscription_id}: {:?}", curse);
         }
-
-        let cursed = if let Some(Curse::Reinscription) = curse {
-          let first_reinscription = inscribed_offsets
-            .get(&offset)
-            .map(|(_id, count)| count == &0)
-            .unwrap_or(false);
-
-          let initial_inscription_is_cursed = inscribed_offsets
-            .get(&offset)
-            .and_then(|(inscription_id, _count)| {
-              match self.id_to_entry.get(&inscription_id.store()) {
-                Ok(option) => option.map(|entry| {
-                  let loaded_entry = InscriptionEntry::load(entry.value());
-                  loaded_entry.number < 0
-                }),
-                Err(_) => None,
-              }
-            })
-            .unwrap_or(false);
-
-          log::info!("{inscription_id}: is first reinscription: {first_reinscription}, initial inscription is cursed: {initial_inscription_is_cursed}");
-
-          !(initial_inscription_is_cursed && first_reinscription)
-        } else {
-          curse.is_some()
-        };
 
         let unbound = current_input_value == 0
           || inscription.tx_in_offset != 0
-          || curse == Some(Curse::UnrecognizedEvenField);
+          || inscription.inscription.unrecognized_even_field;
 
-        if curse.is_some() || unbound {
+        if unbound {
           log::info!(
-            "indexing inscription {inscription_id} with curse {:?} as cursed {} and unbound {}",
-            curse,
-            cursed,
+            "indexing inscription {inscription_id} as unbound {}",
             unbound
           );
         }

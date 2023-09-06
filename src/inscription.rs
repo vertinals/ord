@@ -16,14 +16,6 @@ const BODY_TAG: [u8; 0] = [];
 const CONTENT_TYPE_TAG: [u8; 1] = [1];
 const PARENT_TAG: [u8; 1] = [3];
 
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Curse {
-  NotInFirstInput,
-  NotAtOffsetZero,
-  Reinscription,
-  UnrecognizedEvenField,
-}
-
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Eq, Default)]
 pub struct Inscription {
   pub body: Option<Vec<u8>>,
