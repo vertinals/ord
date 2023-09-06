@@ -2559,7 +2559,7 @@ mod tests {
   }
 
   #[test]
-  fn unrecognized_even_field_inscriptions_are_cursed_and_unbound() {
+  fn unrecognized_even_field_inscriptions_are_unbound() {
     for context in Context::configurations() {
       context.mine_blocks(1);
 
@@ -2598,14 +2598,14 @@ mod tests {
           .unwrap()
           .unwrap()
           .number,
-        -1
+        0
       );
     }
   }
 
   #[test]
   // https://github.com/ordinals/ord/issues/2062
-  fn zero_value_transaction_inscription_not_cursed_but_unbound() {
+  fn zero_value_transaction_inscription_unbound() {
     for context in Context::configurations() {
       context.mine_blocks(1);
 
@@ -2648,7 +2648,7 @@ mod tests {
   }
 
   #[test]
-  fn transaction_with_inscription_inside_zero_value_2nd_input_should_be_unbound_and_cursed() {
+  fn transaction_with_inscription_inside_zero_value_2nd_input_should_be_unbound() {
     for context in Context::configurations() {
       context.mine_blocks(1);
 
@@ -2688,13 +2688,13 @@ mod tests {
           .unwrap()
           .unwrap()
           .number,
-        -1
+        1
       );
     }
   }
 
   #[test]
-  fn multiple_inscriptions_in_same_tx_all_but_first_input_are_cursed() {
+  fn multiple_inscriptions_in_same_tx() {
     for context in Context::configurations() {
       context.mine_blocks(1);
       context.mine_blocks(1);
@@ -2761,7 +2761,7 @@ mod tests {
           .unwrap()
           .unwrap()
           .number,
-        -1
+        1
       );
 
       assert_eq!(
@@ -2771,13 +2771,13 @@ mod tests {
           .unwrap()
           .unwrap()
           .number,
-        -2
+        2
       );
     }
   }
 
   #[test]
-  fn multiple_inscriptions_same_input_all_but_first_are_cursed_and_unbound() {
+  fn multiple_inscriptions_same_input_all_but_first_are_unbound() {
     for context in Context::configurations() {
       context.rpc_server.mine_blocks(1);
 
@@ -2866,7 +2866,7 @@ mod tests {
           .unwrap()
           .unwrap()
           .number,
-        -1
+        1
       );
 
       assert_eq!(
@@ -2876,7 +2876,7 @@ mod tests {
           .unwrap()
           .unwrap()
           .number,
-        -2
+        2
       );
     }
   }
@@ -2927,8 +2927,8 @@ mod tests {
       });
 
       let first = InscriptionId { txid, index: 0 }; // normal
-      let fourth = InscriptionId { txid, index: 3 }; // cursed but bound
-      let ninth = InscriptionId { txid, index: 8 }; // cursed and unbound
+      let fourth = InscriptionId { txid, index: 3 }; // bound
+      let ninth = InscriptionId { txid, index: 8 }; // unbound
 
       context.mine_blocks(1);
 
@@ -2976,7 +2976,7 @@ mod tests {
           .unwrap()
           .unwrap()
           .number,
-        -3
+        3
       );
 
       assert_eq!(
@@ -2986,7 +2986,7 @@ mod tests {
           .unwrap()
           .unwrap()
           .number,
-        -8
+        8
       );
     }
   }
@@ -3055,219 +3055,6 @@ mod tests {
           .fee,
         11
       );
-    }
-  }
-
-  #[test]
-  fn reinscription_on_cursed_inscription_is_not_cursed() {
-    for context in Context::configurations() {
-      context.mine_blocks(1);
-      context.mine_blocks(1);
-
-      let witness = envelope(&[b"ord", &[1], b"text/plain;charset=utf-8", &[], b"bar"]);
-
-      let cursed_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
-        inputs: &[(1, 0, 0, witness.clone()), (2, 0, 0, witness.clone())],
-        outputs: 2,
-        ..Default::default()
-      });
-
-      let cursed = InscriptionId {
-        txid: cursed_txid,
-        index: 1,
-      };
-
-      context.mine_blocks(1);
-
-      context.index.assert_inscription_location(
-        cursed,
-        SatPoint {
-          outpoint: OutPoint {
-            txid: cursed_txid,
-            vout: 1,
-          },
-          offset: 0,
-        },
-        Some(100 * COIN_VALUE),
-      );
-
-      assert_eq!(
-        context
-          .index
-          .get_inscription_entry(cursed)
-          .unwrap()
-          .unwrap()
-          .number,
-        -1
-      );
-
-      let witness = envelope(&[
-        b"ord",
-        &[1],
-        b"text/plain;charset=utf-8",
-        &[],
-        b"reinscription on cursed",
-      ]);
-
-      let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
-        inputs: &[(3, 1, 1, witness)],
-        ..Default::default()
-      });
-
-      let reinscription_on_cursed = InscriptionId { txid, index: 0 };
-
-      context.mine_blocks(1);
-
-      context.index.assert_inscription_location(
-        reinscription_on_cursed,
-        SatPoint {
-          outpoint: OutPoint { txid, vout: 0 },
-          offset: 0,
-        },
-        Some(100 * COIN_VALUE),
-      );
-
-      assert_eq!(
-        context
-          .index
-          .get_inscription_entry(reinscription_on_cursed)
-          .unwrap()
-          .unwrap()
-          .number,
-        1
-      );
-    }
-  }
-
-  #[test]
-  fn second_reinscription_on_cursed_inscription_is_cursed() {
-    for context in Context::configurations() {
-      context.mine_blocks(1);
-      context.mine_blocks(1);
-
-      let witness = envelope(&[b"ord", &[1], b"text/plain;charset=utf-8", &[], b"bar"]);
-
-      let cursed_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
-        inputs: &[(1, 0, 0, witness.clone()), (2, 0, 0, witness.clone())],
-        outputs: 2,
-        ..Default::default()
-      });
-
-      let cursed = InscriptionId {
-        txid: cursed_txid,
-        index: 1,
-      };
-
-      context.mine_blocks(1);
-
-      context.index.assert_inscription_location(
-        cursed,
-        SatPoint {
-          outpoint: OutPoint {
-            txid: cursed_txid,
-            vout: 1,
-          },
-          offset: 0,
-        },
-        Some(100 * COIN_VALUE),
-      );
-
-      assert_eq!(
-        context
-          .index
-          .get_inscription_entry(cursed)
-          .unwrap()
-          .unwrap()
-          .number,
-        -1
-      );
-
-      let witness = envelope(&[
-        b"ord",
-        &[1],
-        b"text/plain;charset=utf-8",
-        &[],
-        b"reinscription on cursed",
-      ]);
-
-      let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
-        inputs: &[(3, 1, 1, witness)],
-        ..Default::default()
-      });
-
-      let reinscription_on_cursed = InscriptionId { txid, index: 0 };
-
-      context.mine_blocks(1);
-
-      context.index.assert_inscription_location(
-        reinscription_on_cursed,
-        SatPoint {
-          outpoint: OutPoint { txid, vout: 0 },
-          offset: 0,
-        },
-        Some(100 * COIN_VALUE),
-      );
-
-      assert_eq!(
-        context
-          .index
-          .get_inscription_entry(reinscription_on_cursed)
-          .unwrap()
-          .unwrap()
-          .number,
-        1
-      );
-
-      let witness = envelope(&[
-        b"ord",
-        &[1],
-        b"text/plain;charset=utf-8",
-        &[],
-        b"second reinscription on cursed",
-      ]);
-
-      let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
-        inputs: &[(4, 1, 0, witness)],
-        ..Default::default()
-      });
-
-      let second_reinscription_on_cursed = InscriptionId { txid, index: 0 };
-
-      context.mine_blocks(1);
-
-      context.index.assert_inscription_location(
-        second_reinscription_on_cursed,
-        SatPoint {
-          outpoint: OutPoint { txid, vout: 0 },
-          offset: 0,
-        },
-        Some(100 * COIN_VALUE),
-      );
-
-      assert_eq!(
-        context
-          .index
-          .get_inscription_entry(second_reinscription_on_cursed)
-          .unwrap()
-          .unwrap()
-          .number,
-        -2
-      );
-
-      assert_eq!(
-        vec![
-          cursed,
-          reinscription_on_cursed,
-          second_reinscription_on_cursed
-        ],
-        context
-          .index
-          .get_inscriptions_on_output_with_satpoints(OutPoint { txid, vout: 0 })
-          .unwrap()
-          .iter()
-          .map(|(_satpoint, inscription_id)| *inscription_id)
-          .collect::<Vec<InscriptionId>>()
-      )
     }
   }
 

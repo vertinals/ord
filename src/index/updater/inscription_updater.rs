@@ -10,7 +10,6 @@ pub(super) struct Flotsam {
 #[derive(Debug, Clone)]
 enum Origin {
   New {
-    cursed: bool,
     fee: u64,
     parent: Option<InscriptionId>,
     unbound: bool,
@@ -29,7 +28,6 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
   value_receiver: &'a mut Receiver<u64>,
   id_to_entry: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, InscriptionEntryValue>,
   pub(super) lost_sats: u64,
-  next_cursed_number: i64,
   next_number: i64,
   number_to_id: &'a mut Table<'db, 'tx, i64, &'static InscriptionIdValue>,
   outpoint_to_value: &'a mut Table<'db, 'tx, &'static OutPointValue, u64>,
@@ -70,13 +68,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     unbound_inscriptions: u64,
     value_cache: &'a mut HashMap<OutPoint, u64>,
   ) -> Result<Self> {
-    let next_cursed_number = number_to_id
-      .iter()?
-      .next()
-      .and_then(|result| result.ok())
-      .map(|(number, _id)| number.value() - 1)
-      .unwrap_or(-1);
-
     let next_number = number_to_id
       .iter()?
       .next_back()
@@ -92,7 +83,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       value_receiver,
       id_to_entry,
       lost_sats,
-      next_cursed_number,
       next_number,
       number_to_id,
       outpoint_to_value,
@@ -246,7 +236,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           inscription_id,
           offset,
           origin: Origin::New {
-            cursed,
             fee: 0,
             parent: inscription.inscription.parent(),
             unbound,
@@ -287,7 +276,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           offset,
           origin:
             Origin::New {
-              cursed,
               fee: _,
               parent,
               unbound,
@@ -299,7 +287,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
             offset,
             origin: Origin::New {
               fee: (total_input_value - total_output_value) / u64::from(id_counter),
-              cursed,
               parent,
               unbound,
             },
@@ -412,17 +399,11 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         false
       }
       Origin::New {
-        cursed,
         fee,
         parent,
         unbound,
       } => {
-        let number = if cursed {
-          let next_cursed_number = self.next_cursed_number;
-          self.next_cursed_number -= 1;
-
-          next_cursed_number
-        } else {
+        let number = {
           let next_number = self.next_number;
           self.next_number += 1;
 

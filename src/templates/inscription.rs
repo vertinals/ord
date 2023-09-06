@@ -254,7 +254,7 @@ mod tests {
   }
 
   #[test]
-  fn with_cursed_and_unbound() {
+  fn with_unbound() {
     assert_regex_match!(
       InscriptionHtml {
         children: Vec::new(),
@@ -265,7 +265,7 @@ mod tests {
         inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
         inscription_id: inscription_id(2),
         next: None,
-        number: -1,
+        number: 0,
         output: Some(tx_out(1, address())),
         previous: None,
         sat: None,
@@ -276,7 +276,7 @@ mod tests {
         timestamp: timestamp(0),
       },
       "
-        <h1>Inscription -1 \\(unstable\\)</h1>
+        <h1>Inscription 0</h1>
         .*
         <dl>
           .*
