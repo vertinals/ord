@@ -38,6 +38,7 @@ mod tests {
 
   #[test]
   fn chunkiness() {
+    assert!(false);
     println!(
       "Fine: {}",
       Chunkiness::calculate_factor(MAX_DIVISIBILITY.into(), u64::MAX)

@@ -116,6 +116,7 @@ mod arguments;
 mod blocktime;
 mod chain;
 mod charm;
+mod chunkiness;
 mod config;
 mod decimal;
 mod decimal_sat;
