@@ -24,9 +24,9 @@ impl Chunkiness {
   pub(crate) fn calculate_factor(divisibility: u64, supply: u64) -> f64 {
     // (((divisibility + 1) * supply) as f64).log10()
 
-    let total: f64 = supply.saturating_mul(divisibility + 1).into();
+    let unit_count = supply.saturating_mul(divisibility + 1);
 
-    total.log10()
+    unit_count
   }
 }
 
