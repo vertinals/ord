@@ -162,6 +162,8 @@ impl From<OutPoint> for JsonOutPoint {
 struct FundRawTransactionOptions {
   #[serde(with = "bitcoin::amount::serde::as_btc::opt")]
   fee_rate: Option<Amount>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  change_position: Option<u32>,
 }
 
 #[derive(Deserialize, Clone, PartialEq, Eq, Debug, Serialize)]
@@ -274,7 +276,7 @@ impl Handle {
     self.state().loaded_wallets.clone()
   }
 
-  pub fn get_change_addresses(&self) -> Vec<Address> {
+  pub fn change_addresses(&self) -> Vec<Address> {
     self.state().change_addresses.clone()
   }
 

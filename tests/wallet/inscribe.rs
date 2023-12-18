@@ -1423,7 +1423,7 @@ fn batch_inscribe_works_with_some_destinations_set_and_others_not() {
       ".*
   <dt>address</dt>
   <dd class=monospace>{}</dd>.*",
-      rpc_server.get_change_addresses()[0]
+      rpc_server.change_addresses()[0]
     ),
   );
 
@@ -1779,6 +1779,8 @@ fn server_can_decompress_brotli() {
   assert_eq!(response.status(), StatusCode::NOT_ACCEPTABLE);
 
   let test_server = TestServer::spawn_with_server_args(&rpc_server, &[], &["--decompress"]);
+
+  test_server.sync_server();
 
   let client = reqwest::blocking::Client::builder()
     .brotli(false)

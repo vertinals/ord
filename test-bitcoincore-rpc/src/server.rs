@@ -1,9 +1,11 @@
 use {
   super::*,
   bitcoin::{
+    consensus::Decodable,
     secp256k1::{rand, KeyPair, Secp256k1, XOnlyPublicKey},
     Witness,
   },
+  std::io::Cursor,
 };
 
 pub(crate) struct Server {
@@ -243,7 +245,26 @@ impl Api for Server {
     options: Option<FundRawTransactionOptions>,
     _is_witness: Option<bool>,
   ) -> Result<FundRawTransactionResult, jsonrpc_core::Error> {
-    let mut transaction: Transaction = deserialize(&hex::decode(tx).unwrap()).unwrap();
+    let options = options.unwrap();
+
+    let mut cursor = Cursor::new(hex::decode(tx).unwrap());
+
+    let version = i32::consensus_decode_from_finite_reader(&mut cursor).unwrap();
+    let input = Vec::<TxIn>::consensus_decode_from_finite_reader(&mut cursor).unwrap();
+    let output = Decodable::consensus_decode_from_finite_reader(&mut cursor).unwrap();
+    let lock_time = Decodable::consensus_decode_from_finite_reader(&mut cursor).unwrap();
+
+    let mut transaction = Transaction {
+      version,
+      input,
+      output,
+      lock_time,
+    };
+
+    assert_eq!(
+      options.change_position,
+      Some(transaction.output.len().try_into().unwrap())
+    );
 
     let state = self.state();
 
@@ -260,29 +281,41 @@ impl Api for Server {
       .map(|(outpoint, value)| (value, outpoint))
       .collect::<Vec<(Amount, OutPoint)>>();
 
+    let mut input_value = transaction
+      .input
+      .iter()
+      .map(|txin| state.utxos.get(&txin.previous_output).unwrap().to_sat())
+      .sum::<u64>();
+
+    let shortfall = output_value.saturating_sub(input_value);
+
     utxos.sort();
     utxos.reverse();
 
-    let (input_value, outpoint) = utxos
-      .iter()
-      .find(|(value, outpoint)| value.to_sat() >= output_value && !state.locked.contains(outpoint))
-      .ok_or_else(Self::not_found)?;
+    if shortfall > 0 {
+      let (additional_input_value, outpoint) = utxos
+        .iter()
+        .find(|(value, outpoint)| value.to_sat() >= shortfall && !state.locked.contains(outpoint))
+        .ok_or_else(Self::not_found)?;
 
-    transaction.input.push(TxIn {
-      previous_output: *outpoint,
-      script_sig: ScriptBuf::new(),
-      sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
-      witness: Witness::default(),
-    });
+      transaction.input.push(TxIn {
+        previous_output: *outpoint,
+        script_sig: ScriptBuf::new(),
+        sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+        witness: Witness::default(),
+      });
+
+      input_value += additional_input_value.to_sat();
+    }
 
     let change_position = transaction.output.len() as i32;
 
     transaction.output.push(TxOut {
-      value: input_value.to_sat() - output_value,
+      value: input_value - output_value,
       script_pubkey: ScriptBuf::new(),
     });
 
-    let fee = if let Some(fee_rate) = options.and_then(|options| options.fee_rate) {
+    let fee = if let Some(fee_rate) = options.fee_rate {
       // increase vsize to account for the witness that `fundrawtransaction` will add
       let funded_vsize = transaction.vsize() as f64 + 68.0 / 4.0;
       let funded_kwu = funded_vsize / 1000.0;
