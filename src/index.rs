@@ -2029,11 +2029,11 @@ impl Index {
     outpoint_to_entry: &impl ReadableTable<&'static OutPointValue, &'static [u8]>,
     outpoint: &OutPoint,
   ) -> Result<Option<TxOut>> {
-    Ok(
-      outpoint_to_entry
-        .get(&outpoint.store())?
-        .map(|x| Decodable::consensus_decode(&mut io::Cursor::new(x.value())).unwrap()),
-    )
+    if let Some(x) = outpoint_to_entry.get(&outpoint.store())? {
+      Ok(Some(TxOut::consensus_decode(&mut io::Cursor::new(x.value()))?))
+    } else {
+      Ok(None)
+    }
   }
 
   pub(crate) fn ord_txid_inscriptions(

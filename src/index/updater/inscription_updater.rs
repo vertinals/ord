@@ -63,6 +63,9 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
   pub(super) unbound_inscriptions: u64,
   pub(super) tx_out_receiver: &'a mut Receiver<TxOut>,
   pub(super) tx_out_cache: &'a mut HashMap<OutPoint, TxOut>,
+  count1: u32,
+  count2: u32,
+  count3: u32,
 }
 
 impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
@@ -111,6 +114,9 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       unbound_inscriptions,
       tx_out_receiver,
       tx_out_cache,
+      count1: 0,
+      count2: 0,
+      count3: 0,
     })
   }
   pub(super) fn index_envelopes(
@@ -159,11 +165,11 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       // multi-level cache for UTXO set to get to the input amount
       let current_input_value =
         if let Some(tx_out) = self.tx_out_cache.remove(&tx_in.previous_output) {
+          self.count1 +=1;
           tx_out.value
-        } else if let Some(tx_out) =
-          Index::transaction_output_by_outpoint(self.outpoint_to_entry, &tx_in.previous_output)?
-        {
-          tx_out.value
+        } else if let Some(data) = self.outpoint_to_entry.remove(&tx_in.previous_output.store())? {
+          self.count2+=1;
+          TxOut::consensus_decode(&mut io::Cursor::new(data.value()))?.value
         } else {
           let tx_out = self.tx_out_receiver.blocking_recv().ok_or_else(|| {
             anyhow!(
@@ -171,9 +177,9 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
               tx_in.previous_output.txid
             )
           })?;
-          self
-            .tx_out_cache
-            .insert(tx_in.previous_output, tx_out.clone());
+          self.count3 += 1;
+          // TODO by yxq
+          // log::info!("tx_out_receiver.blocking_recv, height:{}, count1:{}, count2:{}, count3:{}", self.height, self.count1, self.count2, self.count3);
           tx_out.value
         };
 
@@ -341,6 +347,14 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       range_to_vout.insert((output_value, end), vout.try_into().unwrap());
 
       output_value = end;
+
+      self.tx_out_cache.insert(
+        OutPoint {
+          vout: vout.try_into().unwrap(),
+          txid,
+        },
+        tx_out.clone(),
+      );
     }
 
     for (new_satpoint, mut flotsam) in new_locations.into_iter() {

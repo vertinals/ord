@@ -46,7 +46,7 @@ impl<'index> Updater<'_> {
   pub(crate) fn new(index: &'index Index) -> Result<Updater<'index>> {
     Ok(Updater {
       range_cache: HashMap::new(),
-      height: index.block_count()?,
+      height: cmp::max(index.block_count()?, 767428),
       index,
       sat_ranges_since_flush: 0,
       outputs_cached: 0,
@@ -323,13 +323,6 @@ impl<'index> Updater<'_> {
     let mut sat_ranges_written = 0;
     let mut outputs_in_block = 0;
 
-    log::info!(
-      "Block {} at {} with {} transactions…",
-      self.height,
-      timestamp(block.header.time),
-      block.txdata.len()
-    );
-
     // If value_receiver still has values something went wrong with the last block
     // Could be an assert, shouldn't recover from this and commit the last block
     let Err(TryRecvError::Empty) = tx_out_receiver.try_recv() else {
@@ -451,6 +444,7 @@ impl<'index> Updater<'_> {
     )?;
 
     if self.index.index_sats {
+      log::info!("index_sats");
       let mut sat_to_satpoint = wtx.open_table(SAT_TO_SATPOINT)?;
       let mut outpoint_to_sat_ranges = wtx.open_table(OUTPOINT_TO_SAT_RANGES)?;
 
@@ -541,7 +535,11 @@ impl<'index> Updater<'_> {
         outpoint_to_sat_ranges.insert(&OutPoint::null().store(), lost_sat_ranges.as_slice())?;
       }
     } else {
+      // TODO by yxq
+      // let mut i = 0;
       for (tx, txid) in block.txdata.iter().skip(1).chain(block.txdata.first()) {
+        // log::info!("index:{}/{}", i, block.txdata.len());
+        // i+=1;
         inscription_updater.index_envelopes(tx, *txid, None)?;
       }
     }
