@@ -353,7 +353,7 @@ impl Index {
     let genesis_block_coinbase_transaction =
       options.chain().genesis_block().coinbase().unwrap().clone();
 
-    let rdb = rocksdb::DB::open_default(options.data_dir.as_ref().unwrap())?;
+    let rdb = rocksdb::DB::open_default(options.data_dir.as_ref().unwrap().join("rocksdb"))?;
 
     Ok(Self {
       genesis_block_coinbase_txid: genesis_block_coinbase_transaction.txid(),
