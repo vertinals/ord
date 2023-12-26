@@ -46,7 +46,7 @@ impl<'index> Updater<'_> {
   pub(crate) fn new(index: &'index Index) -> Result<Updater<'index>> {
     Ok(Updater {
       range_cache: HashMap::new(),
-      height: index.block_count()?,
+      height: cmp::max(767429, index.block_count()?),
       index,
       sat_ranges_since_flush: 0,
       outputs_cached: 0,
@@ -114,7 +114,7 @@ impl<'index> Updater<'_> {
 
       if uncommitted == 200 {
         self.commit(wtx)?;
-        if self.height >= 200000 {
+        if self.height >= 768000 {
           thread::sleep(Duration::from_secs(u64::MAX));
         }
         uncommitted = 0;
