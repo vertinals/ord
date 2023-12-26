@@ -1,5 +1,5 @@
 use bitcoincore_rpc::bitcoincore_rpc_json::GetBlockResult;
-use rocksdb::{DBWithThreadMode, SingleThreaded};
+use rocksdb::TransactionDB;
 use {
   self::{
     entry::{
@@ -181,7 +181,7 @@ impl<T> BitcoinCoreRpcResultExt<T> for Result<T, bitcoincore_rpc::Error> {
 pub(crate) struct Index {
   client: Client,
   database: Database,
-  rdb: DBWithThreadMode<SingleThreaded>,
+  rdb: TransactionDB,
   durability: redb::Durability,
   first_inscription_height: u32,
   genesis_block_coinbase_transaction: Transaction,
@@ -353,7 +353,8 @@ impl Index {
     let genesis_block_coinbase_transaction =
       options.chain().genesis_block().coinbase().unwrap().clone();
 
-    let rdb = rocksdb::DB::open_default(options.data_dir.as_ref().unwrap().join("rocksdb"))?;
+    let rdb =
+      rocksdb::TransactionDB::open_default(options.data_dir.as_ref().unwrap().join("rocksdb"))?;
 
     Ok(Self {
       genesis_block_coinbase_txid: genesis_block_coinbase_transaction.txid(),

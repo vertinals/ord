@@ -89,6 +89,7 @@ impl<'index> Updater<'_> {
     let (mut outpoint_sender, mut tx_out_receiver) = Self::spawn_fetcher(self.index)?;
 
     let mut uncommitted = 0;
+    let mut rocks_wtx = self.index.rdb.transaction();
     while let Ok(block) = rx.recv() {
       self.index_block(
         self.index,
@@ -96,6 +97,7 @@ impl<'index> Updater<'_> {
         &mut tx_out_receiver,
         &mut wtx,
         block,
+        &mut rocks_wtx,
       )?;
 
       if let Some(progress_bar) = &mut progress_bar {
@@ -114,11 +116,11 @@ impl<'index> Updater<'_> {
 
       if uncommitted == 200 {
         self.commit(wtx)?;
-        self.index.rdb.flush()?;
+        rocks_wtx.commit()?;
         if self.height >= 200000 {
           thread::sleep(Duration::from_secs(u64::MAX));
         }
-
+        rocks_wtx = self.index.rdb.transaction();
         uncommitted = 0;
         wtx = self.index.begin_write()?;
         let height = wtx
@@ -321,6 +323,7 @@ impl<'index> Updater<'_> {
     tx_out_receiver: &mut Receiver<TxOut>,
     wtx: &mut WriteTransaction,
     block: BlockData,
+    rocks_wtx: &mut rocksdb::Transaction<TransactionDB>,
   ) -> Result<()> {
     Reorg::detect_reorg(&block, self.height, self.index)?;
 
@@ -490,6 +493,7 @@ impl<'index> Updater<'_> {
           tx,
           *txid,
           &mut sat_to_satpoint,
+          rocks_wtx,
           &mut input_sat_ranges,
           &mut sat_ranges_written,
           &mut outputs_in_block,
@@ -505,6 +509,7 @@ impl<'index> Updater<'_> {
           tx,
           *txid,
           &mut sat_to_satpoint,
+          rocks_wtx,
           &mut coinbase_inputs,
           &mut sat_ranges_written,
           &mut outputs_in_block,
@@ -521,7 +526,7 @@ impl<'index> Updater<'_> {
 
         for (start, end) in coinbase_inputs {
           if !Sat(start).common() {
-            self.index.rdb.put(
+            rocks_wtx.put(
               start.to_le_bytes(),
               SatPoint {
                 outpoint: OutPoint::null(),
@@ -651,6 +656,7 @@ impl<'index> Updater<'_> {
     tx: &Transaction,
     txid: Txid,
     _sat_to_satpoint: &mut Table<u64, &[u8]>,
+    rocks_wtx: &mut rocksdb::Transaction<TransactionDB>,
     input_sat_ranges: &mut VecDeque<(u64, u64)>,
     sat_ranges_written: &mut u64,
     outputs_traversed: &mut u64,
@@ -675,7 +681,7 @@ impl<'index> Updater<'_> {
           .ok_or_else(|| anyhow!("insufficient inputs for transaction outputs"))?;
 
         if !Sat(range.0).common() {
-          self.index.rdb.put(
+          rocks_wtx.put(
             range.0.to_le_bytes(),
             SatPoint {
               outpoint,
