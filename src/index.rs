@@ -1,4 +1,5 @@
 use bitcoincore_rpc::bitcoincore_rpc_json::GetBlockResult;
+use rocksdb::{DBWithThreadMode, SingleThreaded};
 use {
   self::{
     entry::{
@@ -180,6 +181,7 @@ impl<T> BitcoinCoreRpcResultExt<T> for Result<T, bitcoincore_rpc::Error> {
 pub(crate) struct Index {
   client: Client,
   database: Database,
+  rdb: DBWithThreadMode<SingleThreaded>,
   durability: redb::Durability,
   first_inscription_height: u32,
   genesis_block_coinbase_transaction: Transaction,
@@ -351,10 +353,13 @@ impl Index {
     let genesis_block_coinbase_transaction =
       options.chain().genesis_block().coinbase().unwrap().clone();
 
+    let rdb = rocksdb::DB::open_default(options.data_dir.as_ref().unwrap())?;
+
     Ok(Self {
       genesis_block_coinbase_txid: genesis_block_coinbase_transaction.txid(),
       client,
       database,
+      rdb,
       durability,
       first_inscription_height: options.first_inscription_height(),
       genesis_block_coinbase_transaction,
@@ -899,12 +904,18 @@ impl Index {
   pub(crate) fn rare_sat_satpoint(&self, sat: Sat) -> Result<Option<SatPoint>> {
     Ok(
       self
-        .database
-        .begin_read()?
-        .open_table(SAT_TO_SATPOINT)?
-        .get(&sat.n())?
-        .map(|satpoint| Decodable::consensus_decode(&mut satpoint.value()).unwrap()),
+        .rdb
+        .get(sat.n().to_le_bytes())?
+        .map(|value| Decodable::consensus_decode(&mut io::Cursor::new(value)).unwrap()),
     )
+    // Ok(
+    //   self
+    //     .database
+    //     .begin_read()?
+    //     .open_table(SAT_TO_SATPOINT)?
+    //     .get(&sat.n())?
+    //     .map(|satpoint| Decodable::consensus_decode(&mut satpoint.value()).unwrap()),
+    // )
   }
 
   pub(crate) fn get_rune_by_id(&self, id: RuneId) -> Result<Option<Rune>> {

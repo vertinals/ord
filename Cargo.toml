@@ -72,6 +72,7 @@ tower-http = { version = "0.4.0", features = ["compression-br", "compression-gzi
 utoipa = "4.1.0"
 thiserror = "1.0.51"
 log4rs = { version = "1.2.0", features = ["gzip"] }
+rocksdb = "0.21.0"
 
 [dev-dependencies]
 executable-path = "1.0.0"

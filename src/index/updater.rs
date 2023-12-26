@@ -516,8 +516,8 @@ impl<'index> Updater<'_> {
 
         for (start, end) in coinbase_inputs {
           if !Sat(start).common() {
-            sat_to_satpoint.insert(
-              &start,
+            self.index.rdb.put(
+              start.to_le_bytes(),
               SatPoint {
                 outpoint: OutPoint::null(),
                 offset: lost_sats,
@@ -525,6 +525,15 @@ impl<'index> Updater<'_> {
               .store()
               .as_slice(),
             )?;
+            // sat_to_satpoint.insert(
+            //   &start,
+            //   SatPoint {
+            //     outpoint: OutPoint::null(),
+            //     offset: lost_sats,
+            //   }
+            //   .store()
+            //   .as_slice(),
+            // )?;
           }
 
           lost_sat_ranges.extend_from_slice(&(start, end).store());
@@ -636,7 +645,7 @@ impl<'index> Updater<'_> {
     &mut self,
     tx: &Transaction,
     txid: Txid,
-    sat_to_satpoint: &mut Table<u64, &[u8]>,
+    _sat_to_satpoint: &mut Table<u64, &[u8]>,
     input_sat_ranges: &mut VecDeque<(u64, u64)>,
     sat_ranges_written: &mut u64,
     outputs_traversed: &mut u64,
@@ -661,8 +670,8 @@ impl<'index> Updater<'_> {
           .ok_or_else(|| anyhow!("insufficient inputs for transaction outputs"))?;
 
         if !Sat(range.0).common() {
-          sat_to_satpoint.insert(
-            &range.0,
+          self.index.rdb.put(
+            range.0.to_le_bytes(),
             SatPoint {
               outpoint,
               offset: output.value - remaining,
@@ -670,6 +679,15 @@ impl<'index> Updater<'_> {
             .store()
             .as_slice(),
           )?;
+          // sat_to_satpoint.insert(
+          //   &range.0,
+          //   SatPoint {
+          //     outpoint,
+          //     offset: output.value - remaining,
+          //   }
+          //   .store()
+          //   .as_slice(),
+          // )?;
         }
 
         let count = range.1 - range.0;
