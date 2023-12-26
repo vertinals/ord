@@ -115,7 +115,7 @@ impl<'index> Updater<'_> {
       uncommitted += 1;
 
       if uncommitted == 200 {
-        self.commit(wtx)?;
+        self.commit(wtx, &mut rocks_wtx)?;
         rocks_wtx.commit()?;
         if self.height >= 200000 {
           thread::sleep(Duration::from_secs(u64::MAX));
@@ -152,7 +152,7 @@ impl<'index> Updater<'_> {
     }
 
     if uncommitted > 0 {
-      self.commit(wtx)?;
+      self.commit(wtx, &mut rocks_wtx)?;
     }
 
     if let Some(progress_bar) = &mut progress_bar {
@@ -452,9 +452,6 @@ impl<'index> Updater<'_> {
     )?;
 
     if self.index.index_sats {
-      let mut sat_to_satpoint = wtx.open_table(SAT_TO_SATPOINT)?;
-      let mut outpoint_to_sat_ranges = wtx.open_table(OUTPOINT_TO_SAT_RANGES)?;
-
       let mut coinbase_inputs = VecDeque::new();
 
       let h = Height(self.height);
@@ -477,11 +474,13 @@ impl<'index> Updater<'_> {
               self.outputs_cached += 1;
               sat_ranges
             }
-            None => outpoint_to_sat_ranges
-              .remove(&key)?
-              .ok_or_else(|| anyhow!("Could not find outpoint {} in index", input.previous_output))?
-              .value()
-              .to_vec(),
+            None => {
+              let value = rocks_wtx.get(key.as_slice())?.ok_or_else(|| {
+                anyhow!("Could not find outpoint {} in index", input.previous_output)
+              })?;
+              rocks_wtx.delete(key.as_slice())?;
+              value
+            }
           };
 
           for chunk in sat_ranges.chunks_exact(11) {
@@ -492,7 +491,6 @@ impl<'index> Updater<'_> {
         self.index_transaction_sats(
           tx,
           *txid,
-          &mut sat_to_satpoint,
           rocks_wtx,
           &mut input_sat_ranges,
           &mut sat_ranges_written,
@@ -508,7 +506,6 @@ impl<'index> Updater<'_> {
         self.index_transaction_sats(
           tx,
           *txid,
-          &mut sat_to_satpoint,
           rocks_wtx,
           &mut coinbase_inputs,
           &mut sat_ranges_written,
@@ -519,10 +516,13 @@ impl<'index> Updater<'_> {
       }
 
       if !coinbase_inputs.is_empty() {
-        let mut lost_sat_ranges = outpoint_to_sat_ranges
-          .remove(&OutPoint::null().store())?
-          .map(|ranges| ranges.value().to_vec())
-          .unwrap_or_default();
+        let mut lost_sat_ranges = {
+          let value = rocks_wtx.get(OutPoint::null().store().as_slice())?;
+          if value.is_some() {
+            rocks_wtx.delete(OutPoint::null().store().as_slice())?;
+          }
+          value.unwrap_or_default()
+        };
 
         for (start, end) in coinbase_inputs {
           if !Sat(start).common() {
@@ -551,7 +551,10 @@ impl<'index> Updater<'_> {
           lost_sats += end - start;
         }
 
-        outpoint_to_sat_ranges.insert(&OutPoint::null().store(), lost_sat_ranges.as_slice())?;
+        rocks_wtx.put(
+          OutPoint::null().store().as_slice(),
+          lost_sat_ranges.as_slice(),
+        )?;
       }
     } else {
       for (tx, txid) in block.txdata.iter().skip(1).chain(block.txdata.first()) {
@@ -655,7 +658,6 @@ impl<'index> Updater<'_> {
     &mut self,
     tx: &Transaction,
     txid: Txid,
-    _sat_to_satpoint: &mut Table<u64, &[u8]>,
     rocks_wtx: &mut rocksdb::Transaction<TransactionDB>,
     input_sat_ranges: &mut VecDeque<(u64, u64)>,
     sat_ranges_written: &mut u64,
@@ -728,7 +730,11 @@ impl<'index> Updater<'_> {
     Ok(())
   }
 
-  fn commit(&mut self, wtx: WriteTransaction) -> Result {
+  fn commit(
+    &mut self,
+    wtx: WriteTransaction,
+    rocks_wtx: &mut rocksdb::Transaction<TransactionDB>,
+  ) -> Result {
     log::info!(
       "Committing at block height {}, {} outputs traversed, {} in map, {} cached",
       self.height,
@@ -745,10 +751,11 @@ impl<'index> Updater<'_> {
         self.outputs_inserted_since_flush,
       );
 
-      let mut outpoint_to_sat_ranges = wtx.open_table(OUTPOINT_TO_SAT_RANGES)?;
+      //let mut outpoint_to_sat_ranges = wtx.open_table(OUTPOINT_TO_SAT_RANGES)?;
 
       for (outpoint, sat_range) in self.range_cache.drain() {
-        outpoint_to_sat_ranges.insert(&outpoint, sat_range.as_slice())?;
+        rocks_wtx.put(outpoint.as_slice(), sat_range.as_slice())?;
+        //outpoint_to_sat_ranges.insert(&outpoint, sat_range.as_slice())?;
       }
 
       self.outputs_inserted_since_flush = 0;
