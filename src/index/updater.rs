@@ -114,6 +114,7 @@ impl<'index> Updater<'_> {
 
       if uncommitted == 200 {
         self.commit(wtx)?;
+        self.index.rdb.flush()?;
         if self.height >= 200000 {
           thread::sleep(Duration::from_secs(u64::MAX));
         }
