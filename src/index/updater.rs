@@ -518,11 +518,12 @@ impl<'index> Updater<'_> {
           if !Sat(start).common() {
             sat_to_satpoint.insert(
               &start,
-              &SatPoint {
+              SatPoint {
                 outpoint: OutPoint::null(),
                 offset: lost_sats,
               }
-              .store(),
+              .store()
+              .as_slice(),
             )?;
           }
 
@@ -635,7 +636,7 @@ impl<'index> Updater<'_> {
     &mut self,
     tx: &Transaction,
     txid: Txid,
-    sat_to_satpoint: &mut Table<u64, &SatPointValue>,
+    sat_to_satpoint: &mut Table<u64, &[u8]>,
     input_sat_ranges: &mut VecDeque<(u64, u64)>,
     sat_ranges_written: &mut u64,
     outputs_traversed: &mut u64,
@@ -662,11 +663,12 @@ impl<'index> Updater<'_> {
         if !Sat(range.0).common() {
           sat_to_satpoint.insert(
             &range.0,
-            &SatPoint {
+            SatPoint {
               outpoint,
               offset: output.value - remaining,
             }
-            .store(),
+            .store()
+            .as_slice(),
           )?;
         }
 

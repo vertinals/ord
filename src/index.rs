@@ -74,7 +74,7 @@ define_table! { OUTPOINT_TO_SAT_RANGES, &OutPointValue, &[u8] }
 define_table! { OUTPOINT_TO_ENTRY, &OutPointValue, &[u8]}
 define_table! { RUNE_ID_TO_RUNE_ENTRY, RuneIdValue, RuneEntryValue }
 define_table! { RUNE_TO_RUNE_ID, u128, RuneIdValue }
-define_table! { SAT_TO_SATPOINT, u64, &SatPointValue }
+define_table! { SAT_TO_SATPOINT, u64, &[u8] }
 define_table! { SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, u32, InscriptionEntryValue }
 define_table! { SEQUENCE_NUMBER_TO_RUNE, u32, u128 }
 define_table! { SEQUENCE_NUMBER_TO_SATPOINT, u32, &SatPointValue }
@@ -887,7 +887,10 @@ impl Index {
 
     for range in sat_to_satpoint.range(0..)? {
       let (sat, satpoint) = range?;
-      result.push((Sat(sat.value()), Entry::load(*satpoint.value())));
+      result.push((
+        Sat(sat.value()),
+        Decodable::consensus_decode(&mut io::Cursor::new(satpoint.value())).unwrap(),
+      ));
     }
 
     Ok(result)
@@ -900,7 +903,7 @@ impl Index {
         .begin_read()?
         .open_table(SAT_TO_SATPOINT)?
         .get(&sat.n())?
-        .map(|satpoint| Entry::load(*satpoint.value())),
+        .map(|satpoint| Decodable::consensus_decode(&mut satpoint.value()).unwrap()),
     )
   }
 
@@ -1958,16 +1961,15 @@ impl Index {
 
           // we do not track common sats (only the sat ranges)
           if !Sat(sat).common() {
+            let value = *rtx
+              .open_table(SAT_TO_SATPOINT)
+              .unwrap()
+              .get(&sat)
+              .unwrap()
+              .unwrap()
+              .value();
             assert_eq!(
-              SatPoint::load(
-                *rtx
-                  .open_table(SAT_TO_SATPOINT)
-                  .unwrap()
-                  .get(&sat)
-                  .unwrap()
-                  .unwrap()
-                  .value()
-              ),
+              SatPoint::consensus_decode(&mut io::Cursor::new(value)).unwrap(),
               satpoint,
             );
           }
