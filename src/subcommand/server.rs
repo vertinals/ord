@@ -256,6 +256,10 @@ impl Server {
           get(ord::ord_block_inscriptions),
         )
         .route(
+          "/crawler/zeroindexer/:height",
+          get(ord::crawler_zeroindexer),
+        )
+        .route(
           "/ord/debug/bitmap/district/:number",
           get(ord::ord_debug_bitmap_district),
         );
