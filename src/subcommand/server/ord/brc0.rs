@@ -171,6 +171,8 @@ fn resolve_brczero_inscription(
                                 continue;
                             },
                         }
+                    } else {
+                        continue
                     }
                 },
                 _ => {
