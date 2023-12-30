@@ -277,6 +277,15 @@ fn deserialize_inscription(
     if value.get("p") == None || !value["p"].is_string(){
         return Err(JSONError::InvalidJson.into());
     }
+    let protocol_name =  match value.get("p") {
+        None => {return Err(JSONError::NotBRC0Json.into())}
+        Some(v) => {
+            v.to_string().replace("\"", "")
+        }
+    };
+    if protocol_name != "brc-20".to_string() {
+        return Err(JSONError::InvalidJson.into());
+    }
 
     return Ok(serde_json::to_string(&value).unwrap())
 }
