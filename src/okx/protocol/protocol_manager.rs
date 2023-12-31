@@ -80,11 +80,7 @@ impl ProtocolManager {
         cost3 += Instant::now().saturating_duration_since(start).as_millis();
         messages_size += messages.len();
 
-        let zeroindexer_height = match self.config.first_brc20_height {
-          None => continue,
-          Some(height) => height,
-        };
-        if context.chain.blockheight >= zeroindexer_height {
+        if context.chain.blockheight >= 779832 {
           match resolve_zero_inscription(context, &block.header.block_hash(), tx, tx_operations) {
             Ok(mut results) => zero_indexer_txs.append(&mut results),
             Err(e) => {
@@ -100,7 +96,7 @@ impl ProtocolManager {
       bitmap_count = ord_proto::bitmap::index_bitmap(context, &operations)?;
     }
 
-    if context.chain.blockheight >= zeroindexer_height {
+    if context.chain.blockheight >= 779832 {
       match context.insert_zero_indexer_txs(
         context.chain.blockheight as u64,
         &ZeroData {
