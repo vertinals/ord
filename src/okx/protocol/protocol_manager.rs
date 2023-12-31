@@ -50,6 +50,8 @@ impl ProtocolManager {
         continue;
       }
 
+      log::info!("debug1");
+
       // index inscription operations.
       if let Some(tx_operations) = operations.get(txid) {
         // save all transaction operations to ord database.
@@ -62,6 +64,8 @@ impl ProtocolManager {
           cost1 += Instant::now().saturating_duration_since(start).as_millis();
         }
 
+        log::info!("debug2");
+
         let start = Instant::now();
         // Resolve and execute messages.
         let messages = self
@@ -69,12 +73,16 @@ impl ProtocolManager {
           .resolve_message(context, tx, tx_operations)?;
         cost2 += Instant::now().saturating_duration_since(start).as_millis();
 
+        log::info!("debug3");
+
         let start = Instant::now();
         for msg in messages.iter() {
           self.call_man.execute_message(context, msg)?;
         }
         cost3 += Instant::now().saturating_duration_since(start).as_millis();
         messages_size += messages.len();
+
+        log::info!("debug4");
       }
     }
     let mut bitmap_count = 0;

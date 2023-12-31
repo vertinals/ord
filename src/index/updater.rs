@@ -181,7 +181,7 @@ impl<'index> Updater<'_> {
       match Self::get_block_with_retries(&client, height, index_sats, first_inscription_height) {
         Ok(Some(block)) => {
           if let Err(err) = tx.send(block.into()) {
-            log::info!("Block receiver disconnected: {err}");
+            log::error!("Block receiver disconnected: {err}");
             break;
           }
           height += 1;
