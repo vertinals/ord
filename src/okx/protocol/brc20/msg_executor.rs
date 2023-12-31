@@ -67,6 +67,8 @@ pub fn execute(context: &mut Context, msg: &ExecutionMessage) -> Result<Option<R
     Operation::Transfer(_) => process_transfer(context, msg),
   };
 
+  log::info!("debug4");
+
   let receipt = Receipt {
     inscription_id: msg.inscription_id,
     inscription_number: msg.inscription_number,
@@ -337,6 +339,8 @@ fn process_transfer(context: &mut Context, msg: &ExecutionMessage) -> Result<Eve
     .map_err(|e| Error::LedgerError(e))?
     .ok_or(BRC20Error::TransferableNotFound(msg.inscription_id))?;
 
+  log::info!("debug5");
+
   let amt = Into::<Num>::into(transferable.amount);
 
   if transferable.owner != msg.from {
@@ -395,10 +399,12 @@ fn process_transfer(context: &mut Context, msg: &ExecutionMessage) -> Result<Eve
     .update_token_balance(&to_script_key, to_balance)
     .map_err(|e| Error::LedgerError(e))?;
 
+  log::info!("debug6");
   context
     .remove_transferable(&msg.from, &tick, &msg.inscription_id)
     .map_err(|e| Error::LedgerError(e))?;
 
+  log::info!("debug7");
   context
     .remove_inscribe_transfer_inscription(&msg.inscription_id)
     .map_err(|e| Error::LedgerError(e))?;
