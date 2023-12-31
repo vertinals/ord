@@ -349,39 +349,78 @@ impl<'index> Updater<'_> {
         .iter()
         .map(|(_, txid)| txid)
         .collect::<HashSet<_>>();
-      use rayon::prelude::*;
-      let tx_outs = block
-        .txdata
-        .par_iter()
-        .flat_map(|(tx, _)| tx.input.par_iter())
-        .filter_map(|input| {
+      #[cfg(feature = "parallel")]
+      {
+        use rayon::prelude::*;
+        let tx_outs = block
+          .txdata
+          .par_iter()
+          .flat_map(|(tx, _)| tx.input.par_iter())
+          .filter_map(|input| {
+            total_outputs_count.fetch_add(1, Ordering::Relaxed);
+            let prev_output = input.previous_output;
+            // We don't need coinbase input value
+            if prev_output.is_null() {
+              None
+            } else if txids.contains(&prev_output.txid) {
+              meet_outputs_count.fetch_add(1, Ordering::Relaxed);
+              None
+            } else if tx_out_cache.contains_key(&prev_output) {
+              cache_outputs_count.fetch_add(1, Ordering::Relaxed);
+              None
+            } else if let Some(txout) =
+              crate::okx::datastore::ord::redb::table::get_txout_by_outpoint(
+                &outpoint_to_entry,
+                &prev_output,
+              )
+              .unwrap()
+            {
+              miss_outputs_count.fetch_add(1, Ordering::Relaxed);
+              Some((prev_output, txout))
+            } else {
+              fetching_outputs_count.fetch_add(1, Ordering::Relaxed);
+              if let Err(err) = outpoint_sender.blocking_send(prev_output) {
+                log::error!("Failed to send to outpoint_sender: {:?}", err);
+              }
+              None
+            }
+          })
+          .collect::<Vec<_>>();
+        for (out_point, tx_out) in tx_outs.into_iter() {
+          tx_out_cache.insert(out_point, tx_out);
+        }
+      }
+
+      #[cfg(not(feature = "parallel"))]
+      for (tx, _) in &block.txdata {
+        for input in &tx.input {
           total_outputs_count.fetch_add(1, Ordering::Relaxed);
           let prev_output = input.previous_output;
           // We don't need coinbase input value
           if prev_output.is_null() {
-            None
-          } else if txids.contains(&prev_output.txid) {
-            meet_outputs_count.fetch_add(1, Ordering::Relaxed);
-            None
-          } else if tx_out_cache.contains_key(&prev_output) {
-            cache_outputs_count.fetch_add(1, Ordering::Relaxed);
-            None
-          } else if let Some(txout) =
-            get_txout_by_outpoint(&outpoint_to_entry, &prev_output).unwrap()
-          {
-            miss_outputs_count.fetch_add(1, Ordering::Relaxed);
-            Some((prev_output, txout))
-          } else {
-            fetching_outputs_count.fetch_add(1, Ordering::Relaxed);
-            if let Err(err) = outpoint_sender.blocking_send(prev_output) {
-              log::error!("Failed to send to outpoint_sender: {:?}", err);
-            }
-            None
+            continue;
           }
-        })
-        .collect::<Vec<_>>();
-      for (out_point, tx_out) in tx_outs.into_iter() {
-        tx_out_cache.insert(out_point, tx_out);
+          // We don't need input values from txs earlier in the block, since they'll be added to value_cache
+          // when the tx is indexed
+          if txids.contains(&prev_output.txid) {
+            meet_outputs_count.fetch_add(1, Ordering::Relaxed);
+            continue;
+          }
+          if tx_out_cache.contains_key(&prev_output) {
+            cache_outputs_count.fetch_add(1, Ordering::Relaxed);
+            continue;
+          }
+          // We don't need input values we already have in our outpoint_to_entry table from earlier blocks that
+          // were committed to db already
+          if let Some(txout) = get_txout_by_outpoint(&outpoint_to_entry, &prev_output)? {
+            miss_outputs_count.fetch_add(1, Ordering::Relaxed);
+            tx_out_cache.insert(prev_output, txout);
+            continue;
+          }
+          fetching_outputs_count.fetch_add(1, Ordering::Relaxed);
+          // We don't know the value of this tx input. Send this outpoint to background thread to be fetched
+          outpoint_sender.blocking_send(prev_output)?;
+        }
       }
     }
 
