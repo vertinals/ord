@@ -373,9 +373,9 @@ impl<'index> Updater<'_> {
             Some((prev_output, txout))
           } else {
             fetching_outputs_count.fetch_add(1, Ordering::Relaxed);
-            outpoint_sender
-              .blocking_send(prev_output)
-              .expect("Failed to send to outpoint_sender");
+            if let Err(err) = outpoint_sender.blocking_send(prev_output) {
+              log::error!("Failed to send to outpoint_sender: {:?}", err);
+            }
             None
           }
         })
