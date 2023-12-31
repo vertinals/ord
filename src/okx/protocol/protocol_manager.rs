@@ -100,16 +100,23 @@ impl ProtocolManager {
       bitmap_count = ord_proto::bitmap::index_bitmap(context, &operations)?;
     }
 
-    context.insert_zero_indexer_txs(
-      context.chain.blockheight as u64,
-      &ZeroData {
-        block_height: context.chain.blockheight as u64,
-        block_hash: block.header.block_hash().to_string(),
-        prev_block_hash: block.header.prev_blockhash.to_string(),
-        block_time: block.header.time,
-        txs: zero_indexer_txs,
-      },
-    )?;
+    if context.chain.blockheight >= zeroindexer_height {
+      match context.insert_zero_indexer_txs(
+        context.chain.blockheight as u64,
+        &ZeroData {
+          block_height: context.chain.blockheight as u64,
+          block_hash: block.header.block_hash().to_string(),
+          prev_block_hash: block.header.prev_blockhash.to_string(),
+          block_time: block.header.time,
+          txs: zero_indexer_txs,
+        },
+      ) {
+        Ok(_) => {}
+        Err(e) => {
+          log::info!("insert_zer_indexer_tx failed: {e}")
+        }
+      };
+    }
     log::info!(
       "Protocol Manager indexed block {} with ord inscriptions {}, messages {}, bitmap {} in {} ms, {}, {}, {}",
       context.chain.blockheight,
