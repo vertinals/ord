@@ -3,9 +3,9 @@ use super::*;
 mod inscription;
 mod outpoint;
 mod transaction;
-mod brc0;
+mod zeroindexer;
 
-pub(super) use {inscription::*, outpoint::*, transaction::*,brc0::*};
+pub(super) use {inscription::*, outpoint::*, transaction::*, zeroindexer::*};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OrdError {

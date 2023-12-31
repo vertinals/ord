@@ -4,7 +4,7 @@ use {
         ord::{Action, InscriptionOp},
         ScriptKey,
     },
-    crate::okx::protocol::brc0::{
+    crate::okx::protocol::zeroindexer::{
         zerodata::{ZeroData,ZeroIndexerTx,InscriptionContext},
         error::JSONError,
     },
@@ -60,15 +60,15 @@ pub(crate) async fn crawler_zeroindexer(
     log::debug!("rpc: get ord_block_inscriptions: {:?}", block_inscriptions);
     let mut txs: Vec<ZeroIndexerTx> = Vec::new();
     for (txid, ops) in block_inscriptions {
-        match resolve_brczero_inscription(BlockContext{
+        match resolve_zero_inscription(BlockContext{
             network: index.get_chain_network(),
             blockheight: height,
             blocktime: blockinfo.time as u32,
         },
-        &blockinfo.hash,
-        txid,
-            ops,
-            &index,
+                                       &blockinfo.hash,
+                                       txid,
+                                       ops,
+                                       &index,
         ) {
             Ok(mut message) => {
                 txs.append(&mut message)
@@ -89,7 +89,7 @@ pub(crate) async fn crawler_zeroindexer(
     Ok(Json(ApiResponse::ok(zero_data)))
 }
 
-fn resolve_brczero_inscription(
+fn resolve_zero_inscription(
     context: BlockContext,
     block_hash: &BlockHash,
     txid: Txid,
@@ -130,8 +130,7 @@ fn resolve_brczero_inscription(
 
             let mut is_transfer = false;
             let mut sender = "".to_string();
-            let mut inscription: String = "".to_string();
-            match operation.action {
+            let inscription = match operation.action {
                 // New inscription is not `cursed` or `unbound`.
                 Action::New {
                     cursed: false,
@@ -141,7 +140,7 @@ fn resolve_brczero_inscription(
                     let des_res = deserialize_inscription(&inscription_struct);
                     match des_res {
                         Ok(content) => {
-                            inscription = content;
+                            content
                         },
                         Err(_) => {
                             continue;
@@ -165,7 +164,7 @@ fn resolve_brczero_inscription(
                         match des_res {
                             Ok(content) => {
                                 sender = get_script_key_on_outpoint(&index,operation.old_satpoint.outpoint)?.to_string();
-                                inscription = content;
+                                content
                             },
                             Err(_) => {
                                 continue;
@@ -280,7 +279,7 @@ fn deserialize_inscription(
         return Err(JSONError::InvalidJson.into());
     }
     let protocol_name =  match value.get("p") {
-        None => {return Err(JSONError::NotBRC0Json.into())}
+        None => {return Err(JSONError::NotZeroIndexerJson.into())}
         Some(v) => {
             v.to_string().replace("\"", "")
         }

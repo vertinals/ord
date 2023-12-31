@@ -1,6 +1,6 @@
 pub(crate) mod ord;
 pub(crate) mod protocol_manager;
-pub(crate) mod brc0;
+pub(crate) mod zeroindexer;
 
 pub use self::protocol_manager::ProtocolManager;
 use {crate::Options, bitcoin::Network};
