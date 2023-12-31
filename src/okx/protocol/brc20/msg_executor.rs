@@ -45,6 +45,7 @@ impl ExecutionMessage {
         .ok_or(anyhow!("new satpoint cannot be None"))?,
       from: context.get_script_key_on_satpoint(&msg.old_satpoint, network)?,
       to: if msg.sat_in_outputs {
+        assert!(msg.new_satpoint.is_some());
         Some(context.get_script_key_on_satpoint(msg.new_satpoint.as_ref().unwrap(), network)?)
       } else {
         None
