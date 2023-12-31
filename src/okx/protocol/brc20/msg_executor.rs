@@ -57,6 +57,7 @@ impl ExecutionMessage {
 
 pub fn execute(context: &mut Context, msg: &ExecutionMessage) -> Result<Option<Receipt>> {
   log::debug!("BRC20 execute message: {:?}", msg);
+  log::info!("BRC20 execute message: {:?}", msg.op);
   let event = match &msg.op {
     Operation::Deploy(deploy) => process_deploy(context, msg, deploy.clone()),
     Operation::Mint(mint) => process_mint(context, msg, mint.clone()),

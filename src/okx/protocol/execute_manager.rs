@@ -22,6 +22,7 @@ impl CallManager {
         brc20_proto::execute(context, &msg).map(|v| v.map(Receipt::BRC20))?
       }
     };
+    log::info!("debug3");
 
     Ok(())
   }
