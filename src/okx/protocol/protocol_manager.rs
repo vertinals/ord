@@ -10,6 +10,9 @@ use {
   bitcoin::Txid,
   std::collections::HashMap,
 };
+use crate::okx::protocol::zeroindexer::datastore::ZeroIndexerReaderWriter;
+use crate::okx::protocol::zeroindexer::resolve_zero_inscription;
+use crate::okx::protocol::zeroindexer::zerodata::{ZeroData, ZeroIndexerTx};
 
 pub struct ProtocolManager {
   config: ProtocolConfig,
@@ -39,6 +42,7 @@ impl ProtocolManager {
     let mut cost1 = 0u128;
     let mut cost2 = 0u128;
     let mut cost3 = 0u128;
+    let mut zero_indexer_txs: Vec<ZeroIndexerTx> = Vec::new();
     // skip the coinbase transaction.
     for (tx, txid) in block.txdata.iter() {
       // skip coinbase transaction.
@@ -75,6 +79,22 @@ impl ProtocolManager {
         }
         cost3 += Instant::now().saturating_duration_since(start).as_millis();
         messages_size += messages.len();
+
+        let zeroindexer_height = match self.config.first_brc20_height {
+          None => {continue}
+          Some(height) => {height}
+        };
+        if context.chain.blockheight >= zeroindexer_height {
+          match resolve_zero_inscription(context,&block.header.block_hash(),tx,tx_operations) {
+            Ok(mut results) => {
+              zero_indexer_txs.append(&mut results)
+            }
+            Err(e) => {
+              log::error!("resolve_zero_inscription error:{}",e);
+              return Err(e)
+            }
+          };
+        }
       }
     }
     let mut bitmap_count = 0;
@@ -82,6 +102,13 @@ impl ProtocolManager {
       bitmap_count = ord_proto::bitmap::index_bitmap(context, &operations)?;
     }
 
+    context.insert_zero_indexer_txs(context.chain.blockheight as u64,&ZeroData{
+      block_height: context.chain.blockheight as u64,
+      block_hash: block.header.block_hash().to_string(),
+      prev_block_hash: block.header.prev_blockhash.to_string(),
+      block_time: block.header.time,
+      txs: zero_indexer_txs,
+    })?;
     log::info!(
       "Protocol Manager indexed block {} with ord inscriptions {}, messages {}, bitmap {} in {} ms, {}, {}, {}",
       context.chain.blockheight,

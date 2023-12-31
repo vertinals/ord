@@ -1,4 +1,4 @@
-use crate::index::{InscriptionEntryValue, InscriptionIdValue, OutPointValue};
+use crate::index::{InscriptionEntryValue, InscriptionIdValue, OutPointValue,entry::Entry};
 use crate::inscription_id::InscriptionId;
 use crate::okx::datastore::brc20::redb::table::{
   add_transaction_receipt, get_balance, get_balances, get_inscribe_transfer_inscription,
@@ -20,11 +20,15 @@ use crate::okx::datastore::ord::redb::table::{
 };
 use crate::okx::datastore::ord::{InscriptionOp, OrdReader, OrdReaderWriter};
 use crate::okx::datastore::ScriptKey;
+use crate::okx::protocol::zeroindexer::{
+  datastore::{ZeroIndexerReader, ZeroIndexerReaderWriter},
+  zerodata::ZeroData,
+};
 use crate::okx::protocol::BlockContext;
-use crate::SatPoint;
+use crate::{Inscription, SatPoint};
 use anyhow::anyhow;
 use bitcoin::{Network, OutPoint, TxOut, Txid};
-use redb::Table;
+use redb::{ReadableTable, Table};
 use std::collections::HashMap;
 
 #[allow(non_snake_case)]
@@ -48,6 +52,11 @@ pub struct Context<'a, 'db, 'txn> {
   pub(crate) BRC20_EVENTS: &'a mut Table<'db, 'txn, &'static str, &'static [u8]>,
   pub(crate) BRC20_TRANSFERABLELOG: &'a mut Table<'db, 'txn, &'static str, &'static [u8]>,
   pub(crate) BRC20_INSCRIBE_TRANSFER: &'a mut Table<'db, 'txn, InscriptionIdValue, &'static [u8]>,
+
+  //zero-indexer tables
+  pub(crate) ZERO_INSCRIPTION_ID_TO_INSCRIPTION:
+    &'a mut Table<'db, 'txn, InscriptionIdValue, &'static [u8]>,
+  pub(crate) ZERO_HEIGHT_TO_TXS: &'a mut Table<'db, 'txn, u64, &'static [u8]>,
 }
 
 impl<'a, 'db, 'txn> OrdReader for Context<'a, 'db, 'txn> {
@@ -275,3 +284,61 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for Context<'a, 'db, 'txn> {
     remove_inscribe_transfer_inscription(self.BRC20_INSCRIBE_TRANSFER, inscription_id)
   }
 }
+
+impl<'a, 'db, 'txn> ZeroIndexerReader for Context<'a, 'db, 'txn> {
+  type Error = anyhow::Error;
+
+  fn get_inscription(
+    &self,
+    inscription_id: &InscriptionId,
+  ) -> crate::Result<Option<Inscription>, Self::Error> {
+    Ok(
+      self
+        .ZERO_INSCRIPTION_ID_TO_INSCRIPTION
+        .get(&inscription_id.store())?
+        .map(|x| bincode::deserialize::<Inscription>(x.value()).unwrap()),
+    )
+  }
+
+  fn get_zero_indexer_txs(&self, height: u64) -> crate::Result<Option<ZeroData>, Self::Error> {
+    Ok(
+      self
+        .ZERO_HEIGHT_TO_TXS
+        .get(height)?
+        .map(|x| bincode::deserialize::<ZeroData>(x.value()).unwrap()),
+    )
+  }
+}
+
+impl<'a, 'db, 'txn> ZeroIndexerReaderWriter for Context<'a, 'db, 'txn> {
+  fn insert_inscription(
+    &mut self,
+    inscription_id: &InscriptionId,
+    inscription: &Inscription,
+  ) -> crate::Result<(), Self::Error> {
+    self.ZERO_INSCRIPTION_ID_TO_INSCRIPTION.insert(
+      &inscription_id.store(),
+      bincode::serialize(inscription).unwrap().as_slice(),
+    )?;
+    Ok(())
+  }
+
+  fn remove_inscription(&mut self, inscription_id: &InscriptionId) -> crate::Result<(), Self::Error> {
+    self
+      .ZERO_INSCRIPTION_ID_TO_INSCRIPTION
+      .remove(&inscription_id.store())?;
+    Ok(())
+  }
+
+  fn insert_zero_indexer_txs(
+    &mut self,
+    height: u64,
+    data: &ZeroData,
+  ) -> crate::Result<(), Self::Error> {
+    self
+      .ZERO_HEIGHT_TO_TXS
+      .insert(height, bincode::serialize(data).unwrap().as_slice())?;
+    Ok(())
+  }
+}
+

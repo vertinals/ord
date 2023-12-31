@@ -25,18 +25,21 @@ pub(crate) struct ApiResponse<T: Serialize> {
   /// ok
   #[schema(example = "ok")]
   pub msg: String,
-  pub data: T,
+  pub data: Option<T>,
 }
 
 impl<T> ApiResponse<T>
 where
   T: Serialize,
 {
-  fn new(code: i32, msg: String, data: T) -> Self {
+  fn new(code: i32, msg: String, data: Option<T>) -> Self {
     Self { code, msg, data }
   }
 
   pub fn ok(data: T) -> Self {
-    Self::new(0, "ok".to_string(), data)
+    Self::new(0, "ok".to_string(), Some(data))
+  }
+  pub fn err(msg: String) -> Self {
+    Self::new(1, msg.to_string(), None)
   }
 }

@@ -37,6 +37,7 @@ use {
     sync::Once,
   },
 };
+use crate::okx::protocol::zeroindexer::zerodata::ZeroData;
 
 pub(crate) use self::entry::RuneEntry;
 pub(super) use self::entry::{
@@ -100,6 +101,9 @@ define_table! { BRC20_TOKEN, &str, &[u8] }
 define_table! { BRC20_EVENTS, &str, &[u8] }
 define_table! { BRC20_TRANSFERABLELOG, &str, &[u8] }
 define_table! { BRC20_INSCRIBE_TRANSFER, InscriptionIdValue, &[u8] }
+
+define_table! { ZERO_INSCRIPTION_ID_TO_INSCRIPTION, InscriptionIdValue, &[u8] }
+define_table! { ZERO_HEIGHT_TO_TXS, u64, &[u8] }
 
 #[derive(Debug, PartialEq)]
 pub enum List {
@@ -2229,6 +2233,15 @@ impl Index {
     let res = get_transferable(&table, &ScriptKey::from_address(address.clone()))?;
 
     Ok(res)
+  }
+
+  pub(crate) fn zero_indexer_get_txs(
+    &self,
+    height: u64,
+  ) -> Result<Option<ZeroData>> {
+    let rtx = self.database.begin_read().unwrap();
+    let table = rtx.open_table(ZERO_HEIGHT_TO_TXS)?;
+    Ok(table.get(height)?.map(|x| bincode::deserialize::<ZeroData>(x.value()).unwrap()))
   }
 }
 

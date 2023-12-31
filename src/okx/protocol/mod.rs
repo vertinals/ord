@@ -4,8 +4,8 @@ pub(crate) mod execute_manager;
 pub(crate) mod message;
 pub(crate) mod ord;
 pub(crate) mod protocol_manager;
-pub(crate) mod zeroindexer;
 pub(crate) mod resolve_manager;
+pub(crate) mod zeroindexer;
 
 pub use self::protocol_manager::ProtocolManager;
 
