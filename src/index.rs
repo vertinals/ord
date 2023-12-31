@@ -7,6 +7,8 @@ use crate::okx::datastore::ord::redb::table::{
   get_txout_by_outpoint,
 };
 use crate::okx::datastore::{brc20, ScriptKey};
+use crate::okx::protocol::zeroindexer::datastore::get_zero_indexer_txs;
+use crate::okx::protocol::zeroindexer::zerodata::ZeroData;
 use bitcoincore_rpc::bitcoincore_rpc_json::GetBlockResult;
 use {
   self::{
@@ -37,7 +39,6 @@ use {
     sync::Once,
   },
 };
-use crate::okx::protocol::zeroindexer::zerodata::ZeroData;
 
 pub(crate) use self::entry::RuneEntry;
 pub(super) use self::entry::{
@@ -2235,13 +2236,11 @@ impl Index {
     Ok(res)
   }
 
-  pub(crate) fn zero_indexer_get_txs(
-    &self,
-    height: u64,
-  ) -> Result<Option<ZeroData>> {
+  pub(crate) fn zero_indexer_get_txs(&self, height: u64) -> Result<Option<ZeroData>> {
     let rtx = self.database.begin_read().unwrap();
     let table = rtx.open_table(ZERO_HEIGHT_TO_TXS)?;
-    Ok(table.get(height)?.map(|x| bincode::deserialize::<ZeroData>(x.value()).unwrap()))
+    let res = get_zero_indexer_txs(&table, height)?;
+    Ok(res)
   }
 }
 

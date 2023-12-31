@@ -9,8 +9,8 @@ use crate::{
       context::Context,
       zeroindexer::{
         datastore::{ZeroIndexerReader, ZeroIndexerReaderWriter},
-        error::LedgerError,
         error::JSONError,
+        error::LedgerError,
         zerodata::{InscriptionContext, ZeroIndexerTx},
       },
     },
@@ -109,7 +109,7 @@ pub fn resolve_zero_inscription(
             };
             let des_res = deserialize_zeroindexer_inscription(&inscription_struct);
             match des_res {
-              Ok((content,_,_)) => {
+              Ok((content, _, _)) => {
                 sender = context
                   .get_script_key_on_satpoint(&operation.old_satpoint, context.chain.network)?
                   .to_string();

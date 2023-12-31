@@ -113,13 +113,11 @@ pub(crate) async fn crawler_zeroindexer(
   log::debug!("rpc: get crawler_zeroindexer: {}", height);
 
   match index.zero_indexer_get_txs(height) {
-    Ok(data) => {
-      match data {
-        Some(data) => {Ok(Json(ApiResponse::ok(data)))}
-        None => {Ok(Json(ApiResponse::err("block not found".to_string())))}
-      }
-    }
-    Err(e) => {Err(ApiError::not_found(e))}
+    Ok(data) => match data {
+      Some(data) => Ok(Json(ApiResponse::ok(data))),
+      None => Ok(Json(ApiResponse::err("block not found".to_string()))),
+    },
+    Err(e) => Err(ApiError::not_found(e)),
   }
 }
 

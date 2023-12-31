@@ -1,5 +1,8 @@
 use crate::okx::datastore::ord::redb::table::save_transaction_operations;
 use crate::okx::protocol::context::Context;
+use crate::okx::protocol::zeroindexer::datastore::ZeroIndexerReaderWriter;
+use crate::okx::protocol::zeroindexer::resolve_zero_inscription;
+use crate::okx::protocol::zeroindexer::zerodata::{ZeroData, ZeroIndexerTx};
 use {
   super::*,
   crate::{
@@ -10,9 +13,6 @@ use {
   bitcoin::Txid,
   std::collections::HashMap,
 };
-use crate::okx::protocol::zeroindexer::datastore::ZeroIndexerReaderWriter;
-use crate::okx::protocol::zeroindexer::resolve_zero_inscription;
-use crate::okx::protocol::zeroindexer::zerodata::{ZeroData, ZeroIndexerTx};
 
 pub struct ProtocolManager {
   config: ProtocolConfig,
@@ -81,17 +81,15 @@ impl ProtocolManager {
         messages_size += messages.len();
 
         let zeroindexer_height = match self.config.first_brc20_height {
-          None => {continue}
-          Some(height) => {height}
+          None => continue,
+          Some(height) => height,
         };
         if context.chain.blockheight >= zeroindexer_height {
-          match resolve_zero_inscription(context,&block.header.block_hash(),tx,tx_operations) {
-            Ok(mut results) => {
-              zero_indexer_txs.append(&mut results)
-            }
+          match resolve_zero_inscription(context, &block.header.block_hash(), tx, tx_operations) {
+            Ok(mut results) => zero_indexer_txs.append(&mut results),
             Err(e) => {
-              log::error!("resolve_zero_inscription error:{}",e);
-              return Err(e)
+              log::error!("resolve_zero_inscription error:{}", e);
+              return Err(e);
             }
           };
         }
@@ -102,13 +100,16 @@ impl ProtocolManager {
       bitmap_count = ord_proto::bitmap::index_bitmap(context, &operations)?;
     }
 
-    context.insert_zero_indexer_txs(context.chain.blockheight as u64,&ZeroData{
-      block_height: context.chain.blockheight as u64,
-      block_hash: block.header.block_hash().to_string(),
-      prev_block_hash: block.header.prev_blockhash.to_string(),
-      block_time: block.header.time,
-      txs: zero_indexer_txs,
-    })?;
+    context.insert_zero_indexer_txs(
+      context.chain.blockheight as u64,
+      &ZeroData {
+        block_height: context.chain.blockheight as u64,
+        block_hash: block.header.block_hash().to_string(),
+        prev_block_hash: block.header.prev_blockhash.to_string(),
+        block_time: block.header.time,
+        txs: zero_indexer_txs,
+      },
+    )?;
     log::info!(
       "Protocol Manager indexed block {} with ord inscriptions {}, messages {}, bitmap {} in {} ms, {}, {}, {}",
       context.chain.blockheight,

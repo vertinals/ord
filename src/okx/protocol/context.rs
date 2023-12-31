@@ -1,4 +1,4 @@
-use crate::index::{InscriptionEntryValue, InscriptionIdValue, OutPointValue,entry::Entry};
+use crate::index::{entry::Entry, InscriptionEntryValue, InscriptionIdValue, OutPointValue};
 use crate::inscription_id::InscriptionId;
 use crate::okx::datastore::brc20::redb::table::{
   add_transaction_receipt, get_balance, get_balances, get_inscribe_transfer_inscription,
@@ -323,7 +323,10 @@ impl<'a, 'db, 'txn> ZeroIndexerReaderWriter for Context<'a, 'db, 'txn> {
     Ok(())
   }
 
-  fn remove_inscription(&mut self, inscription_id: &InscriptionId) -> crate::Result<(), Self::Error> {
+  fn remove_inscription(
+    &mut self,
+    inscription_id: &InscriptionId,
+  ) -> crate::Result<(), Self::Error> {
     self
       .ZERO_INSCRIPTION_ID_TO_INSCRIPTION
       .remove(&inscription_id.store())?;
@@ -341,4 +344,3 @@ impl<'a, 'db, 'txn> ZeroIndexerReaderWriter for Context<'a, 'db, 'txn> {
     Ok(())
   }
 }
-

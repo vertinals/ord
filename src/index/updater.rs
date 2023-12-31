@@ -596,7 +596,8 @@ impl<'index> Updater<'_> {
         BRC20_EVENTS: &mut wtx.open_table(BRC20_EVENTS)?,
         BRC20_TRANSFERABLELOG: &mut wtx.open_table(BRC20_TRANSFERABLELOG)?,
         BRC20_INSCRIBE_TRANSFER: &mut wtx.open_table(BRC20_INSCRIBE_TRANSFER)?,
-        ZERO_INSCRIPTION_ID_TO_INSCRIPTION: &mut wtx.open_table(ZERO_INSCRIPTION_ID_TO_INSCRIPTION)?,
+        ZERO_INSCRIPTION_ID_TO_INSCRIPTION: &mut wtx
+          .open_table(ZERO_INSCRIPTION_ID_TO_INSCRIPTION)?,
         ZERO_HEIGHT_TO_TXS: &mut wtx.open_table(ZERO_HEIGHT_TO_TXS)?,
       },
       &block,
