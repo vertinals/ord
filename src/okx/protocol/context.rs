@@ -1,11 +1,11 @@
-use crate::index::{entry::Entry, InscriptionEntryValue, InscriptionIdValue, OutPointValue};
+use crate::index::{InscriptionEntryValue, InscriptionIdValue, OutPointValue, TxidValue,entry::Entry};
 use crate::inscription_id::InscriptionId;
 use crate::okx::datastore::brc20::redb::table::{
   add_transaction_receipt, get_balance, get_balances, get_inscribe_transfer_inscription,
   get_token_info, get_tokens_info, get_transaction_receipts, get_transferable,
   get_transferable_by_id, get_transferable_by_tick, insert_inscribe_transfer_inscription,
   insert_token_info, insert_transferable, remove_inscribe_transfer_inscription,
-  remove_transferable, save_transaction_receipts, update_mint_token_info, update_token_balance,
+  remove_transferable, update_mint_token_info, update_token_balance,
 };
 use crate::okx::datastore::brc20::{
   Balance, Brc20Reader, Brc20ReaderWriter, Receipt, Tick, TokenInfo, TransferInfo, TransferableLog,
@@ -28,7 +28,7 @@ use crate::okx::protocol::BlockContext;
 use crate::{Inscription, SatPoint};
 use anyhow::anyhow;
 use bitcoin::{Network, OutPoint, TxOut, Txid};
-use redb::{ReadableTable, Table};
+use redb::{ReadableTable, MultimapTable,Table};
 use std::collections::HashMap;
 
 #[allow(non_snake_case)]
@@ -37,7 +37,7 @@ pub struct Context<'a, 'db, 'txn> {
   pub(crate) tx_out_cache: &'a mut HashMap<OutPoint, TxOut>,
 
   // ord tables
-  pub(crate) ORD_TX_TO_OPERATIONS: &'a mut Table<'db, 'txn, &'static str, &'static [u8]>,
+  pub(crate) ORD_TX_TO_OPERATIONS: &'a mut Table<'db, 'txn, &'static TxidValue, &'static [u8]>,
   pub(crate) COLLECTIONS_KEY_TO_INSCRIPTION_ID:
     &'a mut Table<'db, 'txn, &'static str, InscriptionIdValue>,
   pub(crate) COLLECTIONS_INSCRIPTION_ID_TO_KINDS:
@@ -49,7 +49,7 @@ pub struct Context<'a, 'db, 'txn> {
   // BRC20 tables
   pub(crate) BRC20_BALANCES: &'a mut Table<'db, 'txn, &'static str, &'static [u8]>,
   pub(crate) BRC20_TOKEN: &'a mut Table<'db, 'txn, &'static str, &'static [u8]>,
-  pub(crate) BRC20_EVENTS: &'a mut Table<'db, 'txn, &'static str, &'static [u8]>,
+  pub(crate) BRC20_EVENTS: &'a mut MultimapTable<'db, 'txn, &'static TxidValue, &'static [u8]>,
   pub(crate) BRC20_TRANSFERABLELOG: &'a mut Table<'db, 'txn, &'static str, &'static [u8]>,
   pub(crate) BRC20_INSCRIBE_TRANSFER: &'a mut Table<'db, 'txn, InscriptionIdValue, &'static [u8]>,
 
@@ -231,14 +231,6 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for Context<'a, 'db, 'txn> {
     update_mint_token_info(self.BRC20_TOKEN, tick, minted_amt, minted_block_number)
   }
 
-  fn save_transaction_receipts(
-    &mut self,
-    txid: &Txid,
-    receipts: &[Receipt],
-  ) -> crate::Result<(), Self::Error> {
-    save_transaction_receipts(self.BRC20_EVENTS, txid, receipts)
-  }
-
   fn add_transaction_receipt(
     &mut self,
     txid: &Txid,
@@ -251,7 +243,7 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for Context<'a, 'db, 'txn> {
     &mut self,
     script: &ScriptKey,
     tick: &Tick,
-    inscription: TransferableLog,
+    inscription: &TransferableLog,
   ) -> crate::Result<(), Self::Error> {
     insert_transferable(self.BRC20_TRANSFERABLELOG, script, tick, inscription)
   }

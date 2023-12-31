@@ -1,15 +1,16 @@
 use crate::index::entry::Entry;
-use crate::index::InscriptionIdValue;
+use crate::index::{InscriptionIdValue, TxidValue};
 use crate::inscription_id::InscriptionId;
 use crate::okx::datastore::brc20::redb::{
-  max_script_tick_key, min_script_tick_key, script_tick_key,
+  max_script_tick_id_key, max_script_tick_key, min_script_tick_id_key, min_script_tick_key,
+  script_tick_id_key, script_tick_key,
 };
 use crate::okx::datastore::brc20::{
   Balance, Receipt, Tick, TokenInfo, TransferInfo, TransferableLog,
 };
 use crate::okx::datastore::ScriptKey;
 use bitcoin::Txid;
-use redb::{ReadableTable, Table};
+use redb::{MultimapTable, ReadableMultimapTable, ReadableTable, Table};
 
 // BRC20_BALANCES
 pub fn get_balances<T>(table: &T, script_key: &ScriptKey) -> crate::Result<Vec<Balance>>
@@ -18,7 +19,7 @@ where
 {
   Ok(
     table
-      .range(min_script_tick_key(script_key).as_str()..max_script_tick_key(script_key).as_str())?
+      .range(min_script_tick_key(script_key).as_str()..=max_script_tick_key(script_key).as_str())?
       .flat_map(|result| {
         result.map(|(_, data)| rmp_serde::from_slice::<Balance>(data.value()).unwrap())
       })
@@ -72,14 +73,14 @@ where
 // BRC20_EVENTS
 pub fn get_transaction_receipts<T>(table: &T, txid: &Txid) -> crate::Result<Vec<Receipt>>
 where
-  T: ReadableTable<&'static str, &'static [u8]>,
+  T: ReadableMultimapTable<&'static TxidValue, &'static [u8]>,
 {
   Ok(
     table
-      .get(txid.to_string().as_str())?
-      .map_or(Vec::new(), |v| {
-        rmp_serde::from_slice::<Vec<Receipt>>(v.value()).unwrap()
-      }),
+      .get(&txid.store())?
+      .into_iter()
+      .map(|x| rmp_serde::from_slice::<Receipt>(x.unwrap().value()).unwrap())
+      .collect(),
   )
 }
 
@@ -110,10 +111,15 @@ where
 {
   Ok(
     table
-      .get(script_tick_key(script, tick).as_str())?
-      .map_or(Vec::new(), |v| {
-        rmp_serde::from_slice::<Vec<TransferableLog>>(v.value()).unwrap()
-      }),
+      .range(
+        min_script_tick_id_key(script, tick).as_str()
+          ..max_script_tick_id_key(script, tick).as_str(),
+      )?
+      .flat_map(|result| {
+        result.map(|(_, v)| rmp_serde::from_slice::<Vec<TransferableLog>>(v.value()).unwrap())
+      })
+      .flatten()
+      .collect(),
   )
 }
 
@@ -196,27 +202,16 @@ pub fn update_mint_token_info<'db, 'txn>(
 }
 
 // BRC20_EVENTS
-pub fn save_transaction_receipts<'db, 'txn>(
-  table: &mut Table<'db, 'txn, &'static str, &'static [u8]>,
-  txid: &Txid,
-  receipts: &[Receipt],
-) -> crate::Result<()> {
-  table.insert(
-    txid.to_string().as_str(),
-    rmp_serde::to_vec(receipts).unwrap().as_slice(),
-  )?;
-  Ok(())
-}
-
-// BRC20_EVENTS
 pub fn add_transaction_receipt<'db, 'txn>(
-  table: &mut Table<'db, 'txn, &'static str, &'static [u8]>,
+  table: &mut MultimapTable<'db, 'txn, &'static TxidValue, &'static [u8]>,
   txid: &Txid,
   receipt: &Receipt,
 ) -> crate::Result<()> {
-  let mut receipts = get_transaction_receipts(table, txid)?;
-  receipts.push(receipt.clone());
-  save_transaction_receipts(table, txid, &receipts)
+  table.insert(
+    &txid.store(),
+    rmp_serde::to_vec(receipt).unwrap().as_slice(),
+  )?;
+  Ok(())
 }
 
 // BRC20_TRANSFERABLELOG
@@ -224,21 +219,11 @@ pub fn insert_transferable<'db, 'txn>(
   table: &mut Table<'db, 'txn, &'static str, &'static [u8]>,
   script: &ScriptKey,
   tick: &Tick,
-  inscription: TransferableLog,
+  inscription: &TransferableLog,
 ) -> crate::Result<()> {
-  let mut logs = get_transferable_by_tick(table, script, tick)?;
-  if logs
-    .iter()
-    .any(|log| log.inscription_id == inscription.inscription_id)
-  {
-    return Ok(());
-  }
-
-  logs.push(inscription);
-
   table.insert(
-    script_tick_key(script, tick).as_str(),
-    rmp_serde::to_vec(&logs).unwrap().as_slice(),
+    script_tick_id_key(script, tick, &inscription.inscription_id).as_str(),
+    rmp_serde::to_vec(&inscription).unwrap().as_slice(),
   )?;
   Ok(())
 }
@@ -250,17 +235,7 @@ pub fn remove_transferable<'db, 'txn>(
   tick: &Tick,
   inscription_id: &InscriptionId,
 ) -> crate::Result<()> {
-  let mut logs = get_transferable_by_tick(table, script, tick)?;
-  let old_len = logs.len();
-
-  logs.retain(|log| &log.inscription_id != inscription_id);
-
-  if logs.len() != old_len {
-    table.insert(
-      script_tick_key(script, tick).as_str(),
-      rmp_serde::to_vec(&logs).unwrap().as_slice(),
-    )?;
-  }
+  table.remove(script_tick_id_key(script, tick, inscription_id).as_str())?;
   Ok(())
 }
 
