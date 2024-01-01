@@ -603,6 +603,7 @@ impl<'index> Updater<'_> {
         blocktime: block.header.time,
       },
       tx_out_cache,
+      total: 0,
       hit: 0,
       miss: 0,
       ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS)?,
@@ -659,11 +660,12 @@ impl<'index> Updater<'_> {
     self.outputs_traversed += outputs_in_block;
 
     log::info!(
-      "Wrote {sat_ranges_written} sat ranges from {outputs_in_block} outputs in {}/{} ms, hit miss: {}/{}",
+      "Wrote {sat_ranges_written} sat ranges from {outputs_in_block} outputs in {}/{} ms, hit miss: {}/{}/{}",
       ord_cost,
       (Instant::now() - start).as_millis(),
       context.hit,
       context.miss,
+      context.total,
     );
 
     Ok(())

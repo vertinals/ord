@@ -31,6 +31,7 @@ use redb::{MultimapTable, Table};
 pub struct Context<'a, 'db, 'txn> {
   pub(crate) chain: BlockContext,
   pub(crate) tx_out_cache: &'a mut LruCache<OutPoint, TxOut>,
+  pub(crate) total: u64,
   pub(crate) hit: u64,
   pub(crate) miss: u64,
 
@@ -75,6 +76,7 @@ impl<'a, 'db, 'txn> OrdReader for Context<'a, 'db, 'txn> {
     satpoint: &SatPoint,
     network: Network,
   ) -> crate::Result<ScriptKey, Self::Error> {
+    self.total += 1;
     if let Some(tx_out) = self.tx_out_cache.get(&satpoint.outpoint) {
       self.hit += 1;
       Ok(ScriptKey::from_script(&tx_out.script_pubkey, network))
