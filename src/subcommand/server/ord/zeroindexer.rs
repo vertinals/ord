@@ -265,6 +265,37 @@ fn resolve_zero_inscription(
   Ok(zero_indexer_txs)
 }
 
+#[utoipa::path(
+get,
+path = "/api/v1/crawler/height",
+responses(
+(status = 200, description = "Obtain inscription actions by blockhash", body = OrdBlockInscriptions),
+(status = 400, description = "Bad query.", body = ApiError, example = json!(&ApiError::bad_request("bad request"))),
+(status = 404, description = "Not found.", body = ApiError, example = json!(&ApiError::not_found("not found"))),
+(status = 500, description = "Internal server error.", body = ApiError, example = json!(&ApiError::internal("internal error"))),
+)
+)]
+pub(crate) async fn crawler_height(
+  Extension(index): Extension<Arc<Index>>,
+) -> ApiResult<FastSyncInfo> {
+  log::debug!("rpc: get crawler_height");
+
+
+  let (ord_height, _) = index.height_btc(false)?;
+
+  let fast_sync_info = FastSyncInfo {
+    crawler_height: ord_height.map(|h| h.0 as u64 ),
+  };
+
+  Ok(Json(ApiResponse::ok(fast_sync_info)))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct FastSyncInfo {
+  #[schema(format = "uint64")]
+  pub crawler_height: Option<u64>,
+}
+
 fn get_script_key_on_outpoint(index: &Arc<Index>, outpoint: OutPoint) -> Result<ScriptKey> {
   match index.get_outpoint_entry(outpoint) {
     Ok(tx_out) => match tx_out {

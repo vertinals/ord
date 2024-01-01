@@ -297,6 +297,7 @@ impl Server {
           "/crawler/zeroindexer/:height",
           get(ord::crawler_zeroindexer),
         )
+        .route("/crawler/height", get(ord::crawler_height))
         .route(
           "/crawler/zeroindexer_new/:height",
           get(ord::crawler_zeroindexer_new),
