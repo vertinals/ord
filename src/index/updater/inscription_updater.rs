@@ -160,7 +160,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       let offset = total_input_value;
 
       // multi-level cache for UTXO set to get to the input amount
-      let current_input_value = if let Some(tx_out) = self.tx_out_cache.pop(&tx_in.previous_output)
+      let current_input_value = if let Some(tx_out) = self.tx_out_cache.get(&tx_in.previous_output)
       {
         // tx_out has been consumed, so remove it from the global cache
         tx_out.value
