@@ -33,7 +33,8 @@ pub struct Context<'a, 'db, 'txn> {
   pub(crate) tx_out_cache: &'a SimpleLru<OutPoint, TxOut>,
 
   // ord tables
-  pub(crate) ORD_TX_TO_OPERATIONS: &'a mut Table<'db, 'txn, &'static TxidValue, &'static [u8]>,
+  pub(crate) ORD_TX_TO_OPERATIONS:
+    Option<&'a mut Table<'db, 'txn, &'static TxidValue, &'static [u8]>>,
   pub(crate) COLLECTIONS_KEY_TO_INSCRIPTION_ID:
     &'a mut Table<'db, 'txn, &'static str, InscriptionIdValue>,
   pub(crate) COLLECTIONS_INSCRIPTION_ID_TO_KINDS:
@@ -85,7 +86,7 @@ impl<'a, 'db, 'txn> OrdReader for Context<'a, 'db, 'txn> {
     &self,
     txid: &Txid,
   ) -> crate::Result<Vec<InscriptionOp>, Self::Error> {
-    get_transaction_operations(self.ORD_TX_TO_OPERATIONS, txid)
+    get_transaction_operations(*self.ORD_TX_TO_OPERATIONS.as_ref().unwrap(), txid)
   }
 
   fn get_collections_of_inscription(
@@ -109,7 +110,11 @@ impl<'a, 'db, 'txn> OrdReaderWriter for Context<'a, 'db, 'txn> {
     txid: &Txid,
     operations: &[InscriptionOp],
   ) -> crate::Result<(), Self::Error> {
-    save_transaction_operations(self.ORD_TX_TO_OPERATIONS, txid, operations)
+    save_transaction_operations(
+      *self.ORD_TX_TO_OPERATIONS.as_mut().unwrap(),
+      txid,
+      operations,
+    )
   }
 
   fn set_inscription_by_collection_key(

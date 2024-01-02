@@ -1,5 +1,6 @@
-use crate::okx::datastore::ord::OrdReaderWriter;
+use crate::okx::datastore::ord::redb::table::save_transaction_operations;
 use crate::okx::protocol::context::Context;
+use std::thread;
 use {
   super::*,
   crate::{
@@ -39,44 +40,66 @@ impl ProtocolManager {
     let mut cost1 = 0u128;
     let mut cost2 = 0u128;
     let mut cost3 = 0u128;
-    // skip the coinbase transaction.
-    for (tx, txid) in block.txdata.iter() {
-      // skip coinbase transaction.
-      if tx
-        .input
-        .first()
-        .is_some_and(|tx_in| tx_in.previous_output.is_null())
-      {
-        continue;
-      }
+    let table = context.ORD_TX_TO_OPERATIONS.take().unwrap();
+    let height = context.chain.blockheight;
+    thread::scope(|s| {
+      s.spawn(|| -> Result {
+        if self.config.enable_ord_receipts && height >= self.config.first_inscription_height {
+          // skip the coinbase transaction.
+          for (tx, txid) in block.txdata.iter() {
+            // skip coinbase transaction.
+            if tx
+              .input
+              .first()
+              .is_some_and(|tx_in| tx_in.previous_output.is_null())
+            {
+              continue;
+            }
 
-      // index inscription operations.
-      if let Some(tx_operations) = operations.get(txid) {
-        // save all transaction operations to ord database.
-        if self.config.enable_ord_receipts
-          && context.chain.blockheight >= self.config.first_inscription_height
-        {
-          let start = Instant::now();
-          context.save_transaction_operations(txid, tx_operations)?;
-          inscriptions_size += tx_operations.len();
-          cost1 += start.elapsed().as_micros();
+            // index inscription operations.
+            if let Some(tx_operations) = operations.get(txid) {
+              // save all transaction operations to ord database.
+              let start = Instant::now();
+              save_transaction_operations(table, txid, tx_operations)?;
+              inscriptions_size += tx_operations.len();
+              cost1 += start.elapsed().as_micros();
+            }
+          }
         }
+        Ok(())
+      });
+      s.spawn(|| -> Result {
+        // skip the coinbase transaction.
+        for (tx, txid) in block.txdata.iter() {
+          // skip coinbase transaction.
+          if tx
+            .input
+            .first()
+            .is_some_and(|tx_in| tx_in.previous_output.is_null())
+          {
+            continue;
+          }
 
-        let start = Instant::now();
-        // Resolve and execute messages.
-        let messages = self
-          .resolve_man
-          .resolve_message(context, tx, tx_operations)?;
-        cost2 += start.elapsed().as_micros();
+          // index inscription operations.
+          if let Some(tx_operations) = operations.get(txid) {
+            let start = Instant::now();
+            // Resolve and execute messages.
+            let messages = self
+              .resolve_man
+              .resolve_message(context, tx, tx_operations)?;
+            cost2 += start.elapsed().as_micros();
 
-        let start = Instant::now();
-        for msg in messages.iter() {
-          self.call_man.execute_message(context, msg)?;
+            let start = Instant::now();
+            for msg in messages.iter() {
+              self.call_man.execute_message(context, msg)?;
+            }
+            cost3 += start.elapsed().as_micros();
+            messages_size += messages.len();
+          }
         }
-        cost3 += start.elapsed().as_micros();
-        messages_size += messages.len();
-      }
-    }
+        Ok(())
+      });
+    });
 
     let bitmap_start = Instant::now();
     let mut bitmap_count = 0;
