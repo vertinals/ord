@@ -288,7 +288,10 @@ impl Server {
         .route(
           "/ord/tx/:txid/inscriptions",
           get(ord::ord_txid_inscriptions),
-        )
+        ).route(
+            "/ord/tx/:txid/inscriptions_op",
+            get(ord::ord_txid_inscriptions_op),
+          )
         .route(
           "/ord/block/:blockhash/inscriptions",
           get(ord::ord_block_inscriptions),
