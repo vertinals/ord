@@ -32,7 +32,6 @@ use crate::{Inscription, SatPoint};
 use anyhow::anyhow;
 use bitcoin::{Network, OutPoint, TxOut, Txid};
 use redb::{MultimapTable, ReadableTable, Table};
-use std::collections::HashMap;
 
 #[allow(non_snake_case)]
 pub struct Context<'a, 'db, 'txn> {
