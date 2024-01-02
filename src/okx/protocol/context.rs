@@ -1,4 +1,4 @@
-use crate::index::{InscriptionEntryValue, InscriptionIdValue, OutPointValue, TxidValue};
+use crate::index::{InscriptionEntryValue, InscriptionIdValue, TxidValue};
 use crate::inscription_id::InscriptionId;
 use crate::okx::datastore::brc20::redb::table::{
   add_transaction_receipt, get_balance, get_balances, get_inscribe_transfer_inscription,
@@ -13,7 +13,7 @@ use crate::okx::datastore::brc20::{
 use crate::okx::datastore::ord::collections::CollectionKind;
 use crate::okx::datastore::ord::redb::table::{
   get_collection_inscription_id, get_collections_of_inscription, get_transaction_operations,
-  get_txout_by_outpoint, set_inscription_attributes, set_inscription_by_collection_key,
+  set_inscription_attributes, set_inscription_by_collection_key,
 };
 use crate::okx::datastore::ord::redb::table::{
   get_inscription_number_by_sequence_number, save_transaction_operations,
@@ -30,9 +30,7 @@ use redb::{MultimapTable, Table};
 #[allow(non_snake_case)]
 pub struct Context<'a, 'db, 'txn> {
   pub(crate) chain: BlockContext,
-  pub(crate) tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
-  pub(crate) hit: u64,
-  pub(crate) miss: u64,
+  pub(crate) tx_out_cache: &'a SimpleLru<OutPoint, TxOut>,
 
   // ord tables
   pub(crate) ORD_TX_TO_OPERATIONS: &'a mut Table<'db, 'txn, &'static TxidValue, &'static [u8]>,
@@ -42,7 +40,6 @@ pub struct Context<'a, 'db, 'txn> {
     &'a mut Table<'db, 'txn, InscriptionIdValue, &'static [u8]>,
   pub(crate) SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY:
     &'a mut Table<'db, 'txn, u32, InscriptionEntryValue>,
-  pub(crate) OUTPOINT_TO_ENTRY: &'a mut Table<'db, 'txn, &'static OutPointValue, &'static [u8]>,
 
   // BRC20 tables
   pub(crate) BRC20_BALANCES: &'a mut Table<'db, 'txn, &'static str, &'static [u8]>,
@@ -76,11 +73,6 @@ impl<'a, 'db, 'txn> OrdReader for Context<'a, 'db, 'txn> {
     network: Network,
   ) -> crate::Result<ScriptKey, Self::Error> {
     if let Some(tx_out) = self.tx_out_cache.get(&satpoint.outpoint) {
-      self.hit += 1;
-      Ok(ScriptKey::from_script(&tx_out.script_pubkey, network))
-    } else if let Some(tx_out) = get_txout_by_outpoint(self.OUTPOINT_TO_ENTRY, &satpoint.outpoint)?
-    {
-      self.miss += 1;
       Ok(ScriptKey::from_script(&tx_out.script_pubkey, network))
     } else {
       Err(anyhow!(

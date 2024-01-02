@@ -51,7 +51,6 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
   pub(super) inscription_number_to_sequence_number: &'a mut Table<'db, 'tx, i32, u32>,
   pub(super) next_sequence_number: u32,
   pub(super) lost_sats: u64,
-  pub(super) outpoint_to_entry: &'a mut Table<'db, 'tx, &'static OutPointValue, &'static [u8]>,
   pub(super) reward: u64,
   pub(super) sat_to_sequence_number: &'a mut MultimapTable<'db, 'tx, u64, u32>,
   pub(super) satpoint_to_sequence_number:
@@ -78,7 +77,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     inscription_number_to_sequence_number: &'a mut Table<'db, 'tx, i32, u32>,
     next_sequence_number: u32,
     lost_sats: u64,
-    outpoint_to_entry: &'a mut Table<'db, 'tx, &'static OutPointValue, &'static [u8]>,
     sat_to_sequence_number: &'a mut MultimapTable<'db, 'tx, u64, u32>,
     satpoint_to_sequence_number: &'a mut MultimapTable<'db, 'tx, &'static SatPointValue, u32>,
     sequence_number_to_children: &'a mut MultimapTable<'db, 'tx, u32, u32>,
@@ -102,7 +100,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       inscription_number_to_sequence_number,
       next_sequence_number,
       lost_sats,
-      outpoint_to_entry,
       reward: Height(height).subsidy(),
       sat_to_sequence_number,
       satpoint_to_sequence_number,
@@ -398,26 +395,8 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     }
   }
 
-  // write tx_out to outpoint_to_entry table
-  pub(super) fn flush_cache(self) -> Result {
-    let start = Instant::now();
-    let persist = self.new_outpoints.len();
-    let mut entry = Vec::new();
-    for outpoint in self.new_outpoints.into_iter() {
-      let tx_out = self.tx_out_cache.get(&outpoint).unwrap();
-      tx_out.consensus_encode(&mut entry)?;
-      self
-        .outpoint_to_entry
-        .insert(&outpoint.store(), entry.as_slice())?;
-      entry.clear();
-    }
-    log::info!(
-      "flush cache, persist:{}, global:{} cost: {}ms",
-      persist,
-      self.tx_out_cache.len(),
-      start.elapsed().as_millis()
-    );
-    Ok(())
+  pub(super) fn finish(self) -> Vec<OutPoint> {
+    self.new_outpoints
   }
 
   fn calculate_sat(

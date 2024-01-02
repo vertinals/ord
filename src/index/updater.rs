@@ -457,7 +457,6 @@ impl<'index> Updater<'_> {
       &mut inscription_number_to_sequence_number,
       next_sequence_number,
       lost_sats,
-      &mut outpoint_to_entry,
       &mut sat_to_sequence_number,
       &mut satpoint_to_sequence_number,
       &mut sequence_number_to_children,
@@ -596,33 +595,55 @@ impl<'index> Updater<'_> {
       &inscription_updater.unbound_inscriptions,
     )?;
 
-    inscription_updater.flush_cache()?;
+    //inscription_updater.flush_cache()?;
+    let new_outpoints = inscription_updater.finish();
 
-    let mut context = Context {
-      chain: BlockContext {
-        network: index.get_chain_network(),
-        blockheight: self.height,
-        blocktime: block.header.time,
-      },
-      tx_out_cache,
-      hit: 0,
-      miss: 0,
-      ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS)?,
-      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?,
-      COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
-        .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?,
-      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut sequence_number_to_inscription_entry,
-      OUTPOINT_TO_ENTRY: &mut outpoint_to_entry,
-      BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES)?,
-      BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN)?,
-      BRC20_EVENTS: &mut wtx.open_multimap_table(BRC20_EVENTS)?,
-      BRC20_TRANSFERABLELOG: &mut wtx.open_table(BRC20_TRANSFERABLELOG)?,
-      BRC20_INSCRIBE_TRANSFER: &mut wtx.open_table(BRC20_INSCRIBE_TRANSFER)?,
-    };
+    thread::scope(|s| {
+      s.spawn(|| -> Result {
+        let start = Instant::now();
+        let persist = new_outpoints.len();
+        let mut entry = Vec::new();
+        for outpoint in new_outpoints.into_iter() {
+          let tx_out = tx_out_cache.get(&outpoint).unwrap();
+          tx_out.consensus_encode(&mut entry)?;
+          outpoint_to_entry.insert(&outpoint.store(), entry.as_slice())?;
+          entry.clear();
+        }
+        log::info!(
+          "flush cache, persist:{}, global:{} cost: {}ms",
+          persist,
+          tx_out_cache.len(),
+          start.elapsed().as_millis()
+        );
+        Ok(())
+      });
+      s.spawn(|| -> Result {
+        let mut context = Context {
+          chain: BlockContext {
+            network: index.get_chain_network(),
+            blockheight: self.height,
+            blocktime: block.header.time,
+          },
+          tx_out_cache,
+          ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS)?,
+          COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx
+            .open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?,
+          COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
+            .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?,
+          SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut sequence_number_to_inscription_entry,
+          BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES)?,
+          BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN)?,
+          BRC20_EVENTS: &mut wtx.open_multimap_table(BRC20_EVENTS)?,
+          BRC20_TRANSFERABLELOG: &mut wtx.open_table(BRC20_TRANSFERABLELOG)?,
+          BRC20_INSCRIBE_TRANSFER: &mut wtx.open_table(BRC20_INSCRIBE_TRANSFER)?,
+        };
 
-    // Create a protocol manager to index the block of bitmap data.
-    let config = ProtocolConfig::new_with_options(&index.options);
-    ProtocolManager::new(config).index_block(&mut context, &block, operations)?;
+        // Create a protocol manager to index the block of bitmap data.
+        let config = ProtocolConfig::new_with_options(&index.options);
+        ProtocolManager::new(config).index_block(&mut context, &block, operations)?;
+        Ok(())
+      });
+    });
 
     if index.index_runes && self.height >= self.index.options.first_rune_height() {
       let mut outpoint_to_rune_balances = wtx.open_table(OUTPOINT_TO_RUNE_BALANCES)?;
@@ -661,11 +682,9 @@ impl<'index> Updater<'_> {
     self.outputs_traversed += outputs_in_block;
 
     log::info!(
-      "Wrote {sat_ranges_written} sat ranges from {outputs_in_block} outputs in {}/{} ms, hit miss: {}/{}",
+      "Wrote {sat_ranges_written} sat ranges from {outputs_in_block} outputs in {}/{} ms",
       ord_cost,
       (Instant::now() - start).as_millis(),
-      context.hit,
-      context.miss,
     );
 
     Ok(())
@@ -776,15 +795,12 @@ impl<'index> Updater<'_> {
   }
 }
 
-
 #[cfg(test)]
 mod tests {
   use rayon::prelude::*;
   #[test]
   fn parallel() {
-    let mut a: Vec<_> = (0..10000).into_par_iter().map(|x| {
-      x+1
-    }).collect();
+    let mut a: Vec<_> = (0..10000).into_par_iter().map(|x| x + 1).collect();
 
     let b = a.clone();
     a.sort();
