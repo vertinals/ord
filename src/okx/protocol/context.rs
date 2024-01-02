@@ -38,8 +38,7 @@ pub struct Context<'a, 'db, 'txn> {
     &'a mut Table<'db, 'txn, &'static str, InscriptionIdValue>,
   pub(crate) COLLECTIONS_INSCRIPTION_ID_TO_KINDS:
     &'a mut Table<'db, 'txn, InscriptionIdValue, &'static [u8]>,
-  pub(crate) SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY:
-    &'a mut Table<'db, 'txn, u32, InscriptionEntryValue>,
+  pub(crate) SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &'a Table<'db, 'txn, u32, InscriptionEntryValue>,
 
   // BRC20 tables
   pub(crate) BRC20_BALANCES: &'a mut Table<'db, 'txn, &'static str, &'static [u8]>,

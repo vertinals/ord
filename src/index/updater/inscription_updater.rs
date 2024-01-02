@@ -169,7 +169,9 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         })?;
         // received new tx out from chain node, add it to new_outpoints first and persist it in db later.
         #[cfg(not(feature = "cache"))]
-        self.new_outpoints.push(tx_in.previous_output);
+        if self.height >= self.chain.first_brc20_height() {
+          self.new_outpoints.push(tx_in.previous_output);
+        }
         self
           .tx_out_cache
           .insert(tx_in.previous_output, tx_out.clone());

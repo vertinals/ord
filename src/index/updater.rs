@@ -630,7 +630,7 @@ impl<'index> Updater<'_> {
             .open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?,
           COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
             .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?,
-          SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut sequence_number_to_inscription_entry,
+          SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &sequence_number_to_inscription_entry,
           BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES)?,
           BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN)?,
           BRC20_EVENTS: &mut wtx.open_multimap_table(BRC20_EVENTS)?,
