@@ -1,4 +1,4 @@
-use crate::okx::datastore::ord::redb::table::save_transaction_operations;
+use crate::okx::datastore::ord::OrdReaderWriter;
 use crate::okx::protocol::context::Context;
 use crate::okx::protocol::zeroindexer::datastore::ZeroIndexerReaderWriter;
 use crate::okx::protocol::zeroindexer::resolve_zero_inscription;
@@ -61,9 +61,9 @@ impl ProtocolManager {
           && context.chain.blockheight >= self.config.first_inscription_height
         {
           let start = Instant::now();
-          save_transaction_operations(&mut context.ORD_TX_TO_OPERATIONS, txid, tx_operations)?;
+          context.save_transaction_operations(txid, tx_operations)?;
           inscriptions_size += tx_operations.len();
-          cost1 += Instant::now().saturating_duration_since(start).as_millis();
+          cost1 += start.elapsed().as_micros();
         }
 
         let start = Instant::now();
@@ -71,13 +71,13 @@ impl ProtocolManager {
         let messages = self
           .resolve_man
           .resolve_message(context, tx, tx_operations)?;
-        cost2 += Instant::now().saturating_duration_since(start).as_millis();
+        cost2 += start.elapsed().as_micros();
 
         let start = Instant::now();
         for msg in messages.iter() {
           self.call_man.execute_message(context, msg)?;
         }
-        cost3 += Instant::now().saturating_duration_since(start).as_millis();
+        cost3 += start.elapsed().as_micros();
         messages_size += messages.len();
 
         if context.chain.blockheight >= 779832 {
@@ -91,10 +91,13 @@ impl ProtocolManager {
         }
       }
     }
+
+    let bitmap_start = Instant::now();
     let mut bitmap_count = 0;
     if self.config.enable_index_bitmap {
       bitmap_count = ord_proto::bitmap::index_bitmap(context, &operations)?;
     }
+    let cost4 = bitmap_start.elapsed().as_millis();
 
     if context.chain.blockheight >= 779832 {
       match context.insert_zero_indexer_txs(
@@ -114,15 +117,16 @@ impl ProtocolManager {
       };
     }
     log::info!(
-      "Protocol Manager indexed block {} with ord inscriptions {}, messages {}, bitmap {} in {} ms, {}, {}, {}",
+      "Protocol Manager indexed block {} with ord inscriptions {}, messages {}, bitmap {} in {} ms, {}/{}/{}/{}",
       context.chain.blockheight,
       inscriptions_size,
       messages_size,
       bitmap_count,
-      (Instant::now() - start).as_millis(),
-      cost1,
-      cost2,
-      cost3,
+      start.elapsed().as_millis(),
+      cost1/1000,
+      cost2/1000,
+      cost3/1000,
+      cost4,
     );
     Ok(())
   }

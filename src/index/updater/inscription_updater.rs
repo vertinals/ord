@@ -2,7 +2,7 @@ use super::*;
 use crate::okx::datastore::ord::operation::{Action, InscriptionOp};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub(crate) enum Curse {
+enum Curse {
   DuplicateField,
   IncompleteField,
   NotAtOffsetZero,
@@ -15,16 +15,16 @@ pub(crate) enum Curse {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Flotsam {
-  pub(crate) txid: Txid,
-  pub(crate) inscription_id: InscriptionId,
-  pub(crate) offset: u64,
-  pub(crate) old_satpoint: SatPoint,
-  pub(crate) origin: Origin,
+pub(super) struct Flotsam {
+  txid: Txid,
+  inscription_id: InscriptionId,
+  offset: u64,
+  old_satpoint: SatPoint,
+  origin: Origin,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum Origin {
+enum Origin {
   New {
     cursed: bool,
     fee: u64,
@@ -62,8 +62,8 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
   pub(super) timestamp: u32,
   pub(super) unbound_inscriptions: u64,
   pub(super) tx_out_receiver: &'a mut Receiver<TxOut>,
-  pub(super) tx_out_cache: &'a mut HashMap<OutPoint, TxOut>,
-  tx_out_local_cache: HashMap<OutPoint, (TxOut, bool)>,
+  pub(super) tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
+  pub(super) new_outpoints: Vec<OutPoint>,
 }
 
 impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
@@ -87,7 +87,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     timestamp: u32,
     unbound_inscriptions: u64,
     tx_out_receiver: &'a mut Receiver<TxOut>,
-    tx_out_cache: &'a mut HashMap<OutPoint, TxOut>,
+    tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
   ) -> Result<Self> {
     Ok(Self {
       operations,
@@ -113,7 +113,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       unbound_inscriptions,
       tx_out_receiver,
       tx_out_cache,
-      tx_out_local_cache: HashMap::new(),
+      new_outpoints: vec![],
     })
   }
   pub(super) fn index_envelopes(
@@ -160,27 +160,24 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       let offset = total_input_value;
 
       // multi-level cache for UTXO set to get to the input amount
-      let current_input_value =
-        if let Some(tx_out) = self.tx_out_cache.remove(&tx_in.previous_output) {
-          // tx_out has been consumed, so remove it from the global cache
-          tx_out.value
-        } else if let Some(tx_out) = self.tx_out_local_cache.get_mut(&tx_in.previous_output) {
-          // tx_out has been consumed, so do not add it to the global cache, just persist it in db
-          tx_out.1 = true;
-          tx_out.0.value
-        } else {
-          let tx_out = self.tx_out_receiver.blocking_recv().ok_or_else(|| {
-            anyhow!(
-              "failed to get transaction for {}",
-              tx_in.previous_output.txid
-            )
-          })?;
-          // received new tx out from chain node, add it to the local cache first and persist it in db later.
-          self
-            .tx_out_local_cache
-            .insert(tx_in.previous_output, (tx_out.clone(), false));
-          tx_out.value
-        };
+      let current_input_value = if let Some(tx_out) = self.tx_out_cache.get(&tx_in.previous_output)
+      {
+        tx_out.value
+      } else {
+        let tx_out = self.tx_out_receiver.blocking_recv().ok_or_else(|| {
+          anyhow!(
+            "failed to get transaction for {}",
+            tx_in.previous_output.txid
+          )
+        })?;
+        // received new tx out from chain node, add it to new_outpoints first and persist it in db later.
+        #[cfg(not(feature = "cache"))]
+        self.new_outpoints.push(tx_in.previous_output);
+        self
+          .tx_out_cache
+          .insert(tx_in.previous_output, tx_out.clone());
+        tx_out.value
+      };
 
       total_input_value += current_input_value;
 
@@ -347,22 +344,12 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
 
       output_value = end;
 
-      #[cfg(feature = "cache")]
       self.tx_out_cache.insert(
         OutPoint {
           vout: vout.try_into().unwrap(),
           txid,
         },
         tx_out.clone(),
-      );
-
-      #[cfg(not(feature = "cache"))]
-      self.tx_out_local_cache.insert(
-        OutPoint {
-          vout: vout.try_into().unwrap(),
-          txid,
-        },
-        (tx_out.clone(), false),
       );
     }
 
@@ -412,28 +399,23 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
   }
 
   // write tx_out to outpoint_to_entry table
-  pub(super) fn flush_cache(mut self) -> Result {
+  pub(super) fn flush_cache(self) -> Result {
     let start = Instant::now();
-    let mut count = 0;
-    let persist = self.tx_out_local_cache.len();
+    let persist = self.new_outpoints.len();
     let mut entry = Vec::new();
-    for (outpoint, tx_out) in self.tx_out_local_cache.drain() {
-      tx_out.0.consensus_encode(&mut entry)?;
+    for outpoint in self.new_outpoints.into_iter() {
+      let tx_out = self.tx_out_cache.get(&outpoint).unwrap();
+      tx_out.consensus_encode(&mut entry)?;
       self
         .outpoint_to_entry
         .insert(&outpoint.store(), entry.as_slice())?;
       entry.clear();
-      if !tx_out.1 {
-        count += 1;
-        self.tx_out_cache.insert(outpoint, tx_out.0);
-      }
     }
     log::info!(
-      "flush cache, cache:{} persist:{}, global:{} cost: {}ms",
-      count,
+      "flush cache, persist:{}, global:{} cost: {}ms",
       persist,
       self.tx_out_cache.len(),
-      Instant::now().saturating_duration_since(start).as_millis()
+      start.elapsed().as_millis()
     );
     Ok(())
   }

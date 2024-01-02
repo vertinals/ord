@@ -3,7 +3,7 @@ use crate::index::{InscriptionEntryValue, InscriptionIdValue, OutPointValue, Txi
 use crate::inscription_id::InscriptionId;
 use crate::okx::datastore::ord::collections::CollectionKind;
 use crate::okx::datastore::ord::InscriptionOp;
-use bitcoin::consensus::{Decodable, Encodable};
+use bitcoin::consensus::Decodable;
 use bitcoin::{OutPoint, TxOut, Txid};
 use redb::{ReadableTable, Table};
 use std::io;
@@ -50,13 +50,9 @@ pub fn get_txout_by_outpoint<T>(table: &T, outpoint: &OutPoint) -> crate::Result
 where
   T: ReadableTable<&'static OutPointValue, &'static [u8]>,
 {
-  let mut value = [0; 36];
-  outpoint
-    .consensus_encode(&mut value.as_mut_slice())
-    .unwrap();
   Ok(
     table
-      .get(&value)?
+      .get(&outpoint.store())?
       .map(|x| Decodable::consensus_decode(&mut io::Cursor::new(x.value())).unwrap()),
   )
 }
@@ -122,7 +118,7 @@ mod tests {
     let dbfile = NamedTempFile::new().unwrap();
     let db = Database::create(dbfile.path()).unwrap();
     let wtx = db.begin_write().unwrap();
-    let mut table = wtx.open_table(ORD_TX_TO_OPERATIONS)?;
+    let mut table = wtx.open_table(ORD_TX_TO_OPERATIONS).unwrap();
     let txid =
       Txid::from_str("b61b0172d95e266c18aea0c624db987e971a5d6d4ebc2aaed85da4642d635735").unwrap();
     let operation = InscriptionOp {

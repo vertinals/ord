@@ -9,7 +9,8 @@ use {
 };
 
 pub(crate) mod inscription_updater;
-pub(crate) use inscription_updater::{Flotsam, Origin};
+use crate::okx::lru::SimpleLru;
+
 mod rune_updater;
 
 pub(crate) struct BlockData {
@@ -90,8 +91,9 @@ impl<'index> Updater<'_> {
     let (mut outpoint_sender, mut tx_out_receiver) = Self::spawn_fetcher(self.index)?;
 
     let mut uncommitted = 0;
-    let mut tx_out_cache = HashMap::new();
+    let mut tx_out_cache = SimpleLru::new(self.index.options.lru_size);
     while let Ok(block) = rx.recv() {
+      tx_out_cache.refresh();
       self.index_block(
         self.index,
         &mut outpoint_sender,
@@ -319,7 +321,7 @@ impl<'index> Updater<'_> {
     tx_out_receiver: &mut Receiver<TxOut>,
     wtx: &mut WriteTransaction,
     block: BlockData,
-    tx_out_cache: &mut HashMap<OutPoint, TxOut>,
+    tx_out_cache: &mut SimpleLru<OutPoint, TxOut>,
   ) -> Result<()> {
     Reorg::detect_reorg(&block, self.height, self.index)?;
 
@@ -363,23 +365,26 @@ impl<'index> Updater<'_> {
           } else if txids.contains(&prev_output.txid) {
             meet_outputs_count.fetch_add(1, Ordering::Relaxed);
             None
-          } else if tx_out_cache.contains_key(&prev_output) {
+          } else if tx_out_cache.contains(&prev_output) {
             cache_outputs_count.fetch_add(1, Ordering::Relaxed);
             None
           } else if let Some(txout) =
             get_txout_by_outpoint(&outpoint_to_entry, &prev_output).unwrap()
           {
             miss_outputs_count.fetch_add(1, Ordering::Relaxed);
-            Some((prev_output, txout))
+            Some((prev_output, Some(txout)))
           } else {
             fetching_outputs_count.fetch_add(1, Ordering::Relaxed);
-            outpoint_sender.blocking_send(prev_output).unwrap();
-            None
+            Some((prev_output, None))
           }
         })
         .collect::<Vec<_>>();
-      for (out_point, tx_out) in tx_outs.into_iter() {
-        tx_out_cache.insert(out_point, tx_out);
+      for (out_point, value) in tx_outs.into_iter() {
+        if let Some(tx_out) = value {
+          tx_out_cache.insert(out_point, tx_out);
+        } else {
+          outpoint_sender.blocking_send(out_point).unwrap();
+        }
       }
     }
 
@@ -593,35 +598,34 @@ impl<'index> Updater<'_> {
 
     inscription_updater.flush_cache()?;
 
+    let mut context = Context {
+      chain: BlockContext {
+        network: index.get_chain_network(),
+        blockheight: self.height,
+        blocktime: block.header.time,
+      },
+      tx_out_cache,
+      hit: 0,
+      miss: 0,
+      ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS)?,
+      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?,
+      COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
+        .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?,
+      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut sequence_number_to_inscription_entry,
+      OUTPOINT_TO_ENTRY: &mut outpoint_to_entry,
+      BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES)?,
+      BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN)?,
+      BRC20_EVENTS: &mut wtx.open_multimap_table(BRC20_EVENTS)?,
+      BRC20_TRANSFERABLELOG: &mut wtx.open_table(BRC20_TRANSFERABLELOG)?,
+      BRC20_INSCRIBE_TRANSFER: &mut wtx.open_table(BRC20_INSCRIBE_TRANSFER)?,
+      ZERO_INSCRIPTION_ID_TO_INSCRIPTION: &mut wtx
+          .open_table(ZERO_INSCRIPTION_ID_TO_INSCRIPTION)?,
+      ZERO_HEIGHT_TO_TXS: &mut wtx.open_table(ZERO_HEIGHT_TO_TXS)?,
+    };
+
     // Create a protocol manager to index the block of bitmap data.
     let config = ProtocolConfig::new_with_options(&index.options);
-    ProtocolManager::new(config).index_block(
-      &mut Context {
-        chain: BlockContext {
-          network: index.get_chain_network(),
-          blockheight: self.height,
-          blocktime: block.header.time,
-        },
-        tx_out_cache,
-        ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS)?,
-        COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx
-          .open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?,
-        COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
-          .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?,
-        SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut sequence_number_to_inscription_entry,
-        OUTPOINT_TO_ENTRY: &mut outpoint_to_entry,
-        BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES)?,
-        BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN)?,
-        BRC20_EVENTS: &mut wtx.open_multimap_table(BRC20_EVENTS)?,
-        BRC20_TRANSFERABLELOG: &mut wtx.open_table(BRC20_TRANSFERABLELOG)?,
-        BRC20_INSCRIBE_TRANSFER: &mut wtx.open_table(BRC20_INSCRIBE_TRANSFER)?,
-        ZERO_INSCRIPTION_ID_TO_INSCRIPTION: &mut wtx
-          .open_table(ZERO_INSCRIPTION_ID_TO_INSCRIPTION)?,
-        ZERO_HEIGHT_TO_TXS: &mut wtx.open_table(ZERO_HEIGHT_TO_TXS)?,
-      },
-      &block,
-      operations,
-    )?;
+    ProtocolManager::new(config).index_block(&mut context, &block, operations)?;
 
     if index.index_runes && self.height >= self.index.options.first_rune_height() {
       let mut outpoint_to_rune_balances = wtx.open_table(OUTPOINT_TO_RUNE_BALANCES)?;
@@ -660,9 +664,11 @@ impl<'index> Updater<'_> {
     self.outputs_traversed += outputs_in_block;
 
     log::info!(
-      "Wrote {sat_ranges_written} sat ranges from {outputs_in_block} outputs in {} ms, ord cost: {} ms",
-      (Instant::now() - start).as_millis(),
+      "Wrote {sat_ranges_written} sat ranges from {outputs_in_block} outputs in {}/{} ms, hit miss: {}/{}",
       ord_cost,
+      (Instant::now() - start).as_millis(),
+      context.hit,
+      context.miss,
     );
 
     Ok(())
@@ -770,5 +776,22 @@ impl<'index> Updater<'_> {
     Reorg::update_savepoints(self.index, self.height)?;
 
     Ok(())
+  }
+}
+
+
+#[cfg(test)]
+mod tests {
+  use rayon::prelude::*;
+  #[test]
+  fn parallel() {
+    let mut a: Vec<_> = (0..10000).into_par_iter().map(|x| {
+      x+1
+    }).collect();
+
+    let b = a.clone();
+    a.sort();
+    assert_eq!(a, b);
+    println!("{:?}", a);
   }
 }
