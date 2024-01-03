@@ -49,9 +49,9 @@ impl ProtocolManager {
           for (tx, txid) in block.txdata.iter() {
             // skip coinbase transaction.
             if tx
-                .input
-                .first()
-                .is_some_and(|tx_in| tx_in.previous_output.is_null())
+              .input
+              .first()
+              .is_some_and(|tx_in| tx_in.previous_output.is_null())
             {
               continue;
             }
@@ -73,9 +73,9 @@ impl ProtocolManager {
         for (tx, txid) in block.txdata.iter() {
           // skip coinbase transaction.
           if tx
-              .input
-              .first()
-              .is_some_and(|tx_in| tx_in.previous_output.is_null())
+            .input
+            .first()
+            .is_some_and(|tx_in| tx_in.previous_output.is_null())
           {
             continue;
           }
@@ -85,14 +85,12 @@ impl ProtocolManager {
             let start = Instant::now();
             // Resolve and execute messages.
             let messages = self
-                .resolve_man
-                .resolve_message(context, tx, tx_operations)?;
+              .resolve_man
+              .resolve_message(context, tx, tx_operations)?;
             cost2 += start.elapsed().as_micros();
 
             let start = Instant::now();
-            for msg in messages.iter() {
-              self.call_man.execute_message(context, msg)?;
-            }
+            self.call_man.execute_message(context, txid, &messages)?;
             cost3 += start.elapsed().as_micros();
             messages_size += messages.len();
           }

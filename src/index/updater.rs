@@ -638,7 +638,7 @@ impl<'index> Updater<'_> {
           SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &sequence_number_to_inscription_entry,
           BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES)?,
           BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN)?,
-          BRC20_EVENTS: &mut wtx.open_multimap_table(BRC20_EVENTS)?,
+          BRC20_EVENTS: &mut wtx.open_table(BRC20_EVENTS)?,
           BRC20_TRANSFERABLELOG: &mut wtx.open_table(BRC20_TRANSFERABLELOG)?,
           BRC20_INSCRIBE_TRANSFER: &mut wtx.open_table(BRC20_INSCRIBE_TRANSFER)?,
         };
