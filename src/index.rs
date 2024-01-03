@@ -391,6 +391,11 @@ impl Index {
     };
 
     log::info!("Options:\n{:#?}", options);
+    let mut tx = database.begin_write()?;
+    tx.set_durability(durability);
+    tx.open_table(HEIGHT_TO_BLOCK_HEADER)?;
+    tx.open_table(TRANSACTION_ID_TO_TRANSACTION)?;
+    tx.commit()?;
 
     let genesis_block_coinbase_transaction =
       options.chain().genesis_block().coinbase().unwrap().clone();
