@@ -45,43 +45,16 @@ pub struct TxInscription {
   /// The inscription satpoint of the transaction output.
   pub new_satpoint: Option<String>,
   /// The message sender which is an address or script pubkey hash.
-  pub from: ScriptPubkey,
+  pub from: Option<ScriptPubkey>,
   /// The message receiver which is an address or script pubkey hash.
   pub to: Option<ScriptPubkey>,
 }
 
 impl TxInscription {
-  pub(super) fn new(op: InscriptionOp, index: Arc<Index>) -> Result<Self> {
-    let from = index
-      .get_outpoint_entry(op.old_satpoint.outpoint)?
-      .map(|txout| ScriptKey::from_script(&txout.script_pubkey, index.get_chain_network()))
-      .ok_or(anyhow!(
-        "outpoint {} not found from database",
-        op.old_satpoint.outpoint
-      ))?
-      .into();
-    let to = match op.new_satpoint {
-      Some(new_satpoint) => {
-        if new_satpoint.outpoint == unbound_outpoint() {
-          None
-        } else {
-          Some(
-            index
-              .get_outpoint_entry(new_satpoint.outpoint)?
-              .map(|txout| ScriptKey::from_script(&txout.script_pubkey, index.get_chain_network()))
-              .ok_or(anyhow!(
-                "outpoint {} not found from database",
-                new_satpoint.outpoint
-              ))?
-              .into(),
-          )
-        }
-      }
-      None => None,
-    };
+  pub(super) fn new(op: InscriptionOp, _index: Arc<Index>) -> Result<Self> {
     Ok(TxInscription {
-      from,
-      to,
+      from: None,
+      to: None,
       action: op.action.into(),
       inscription_number: op.inscription_number,
       inscription_id: op.inscription_id.to_string(),
