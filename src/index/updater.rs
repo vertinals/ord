@@ -622,6 +622,7 @@ impl<'index> Updater<'_> {
         Ok(())
       });
       s.spawn(|| -> Result {
+        let mut table = wtx.open_table(ORD_TX_TO_OPERATIONS)?;
         let mut context = Context {
           chain: BlockContext {
             network: index.get_chain_network(),
@@ -629,7 +630,7 @@ impl<'index> Updater<'_> {
             blocktime: block.header.time,
           },
           tx_out_cache,
-          ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS)?,
+          ORD_TX_TO_OPERATIONS: Some(&mut table),
           COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx
             .open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?,
           COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
