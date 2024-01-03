@@ -127,14 +127,14 @@ pub(crate) async fn ord_txid_inscriptions(
   Extension(index): Extension<Arc<Index>>,
   Path(txid): Path<String>,
 ) -> ApiResult<TxInscriptions> {
-  log::debug!("rpc: get ord_txid_inscriptions: {}", txid);
+  log::info!("rpc: get ord_txid_inscriptions: {}", txid);
   let txid = Txid::from_str(&txid).map_err(ApiError::bad_request)?;
 
   let ops = index
     .ord_txid_inscriptions(&txid)?
     .ok_or_api_not_found(OrdError::OperationNotFound)?;
 
-  log::debug!("rpc: get ord_txid_inscriptions: {:?}", ops);
+  log::info!("rpc: get ord_txid_inscriptions: {:?}", ops);
 
   let mut api_tx_inscriptions = Vec::new();
   for op in ops.into_iter() {
