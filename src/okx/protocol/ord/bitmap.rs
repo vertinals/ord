@@ -38,8 +38,8 @@ pub fn index_bitmap(
       Action::New {
         cursed: _,
         unbound: _,
-        vindicated: _,
         inscription,
+        ..
       } => {
         if let Some((inscription_id, district)) =
           index_district(context, inscription, op.inscription_id)?

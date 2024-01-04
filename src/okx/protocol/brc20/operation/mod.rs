@@ -211,8 +211,8 @@ mod tests {
         &Action::New {
           cursed: false,
           unbound: false,
-          vindicated: false,
-          inscription: inscription.clone()
+          inscription: inscription.clone(),
+          unsupported_flags: 0,
         },
       )
       .unwrap(),
@@ -234,8 +234,8 @@ mod tests {
         &Action::New {
           cursed: false,
           unbound: false,
-          vindicated: false,
-          inscription: inscription.clone()
+          inscription: inscription.clone(),
+          unsupported_flags: 0,
         },
       )
       .unwrap(),
@@ -255,8 +255,8 @@ mod tests {
         &Action::New {
           cursed: false,
           unbound: false,
-          vindicated: false,
-          inscription: inscription.clone()
+          inscription: inscription.clone(),
+          unsupported_flags: 0,
         },
       )
       .unwrap(),

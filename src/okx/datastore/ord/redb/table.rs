@@ -126,8 +126,8 @@ mod tests {
       action: Action::New {
         cursed: false,
         unbound: false,
-        vindicated: false,
         inscription: inscription("text/plain;charset=utf-8", "foobar"),
+        unsupported_flags: 0,
       },
       sequence_number: 100,
       inscription_number: Some(100),

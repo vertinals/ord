@@ -33,3 +33,26 @@ pub struct Message {
   pub op: Operation,
   pub sat_in_outputs: bool,
 }
+
+#[derive(Copy, Clone)]
+pub(crate) enum UnsupportedType {
+  Vindicated = 0,
+  ContentEncoding = 1,
+  Delegate = 2,
+  // add more flags
+}
+
+impl UnsupportedType {
+  fn flag(self) -> u16 {
+    1 << self as u16
+  }
+
+  pub(crate) fn set(self, charms: &mut u16) {
+    *charms |= self.flag();
+  }
+
+  #[allow(unused)]
+  pub(crate) fn is_set(self, charms: u16) -> bool {
+    charms & self.flag() != 0
+  }
+}

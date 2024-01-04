@@ -24,7 +24,7 @@ pub enum Action {
     unbound: bool,
     inscription: Inscription,
     #[serde(default)]
-    vindicated: bool,
+    unsupported_flags: u16,
   },
   Transfer,
 }
@@ -75,8 +75,8 @@ mod tests {
       Action::New {
         cursed: true,
         unbound: true,
-        vindicated: false,
         inscription: inscription("text/plain;charset=utf-8", "foobar"),
+        unsupported_flags: 0,
       }
     );
 
@@ -111,8 +111,8 @@ mod tests {
         action: Action::New {
           cursed: true,
           unbound: true,
-          vindicated: false,
           inscription: inscription("text/plain;charset=utf-8", "foobar"),
+          unsupported_flags: 0,
         },
         sequence_number: 100,
         inscription_number: Some(100),

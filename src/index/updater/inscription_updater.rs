@@ -1,5 +1,6 @@
 use super::*;
 use crate::okx::datastore::ord::operation::{Action, InscriptionOp};
+use crate::okx::protocol::brc20::UnsupportedType;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 enum Curse {
@@ -35,6 +36,8 @@ enum Origin {
     unbound: bool,
     inscription: Inscription,
     vindicated: bool,
+    content_encoding: bool,
+    delegate: bool,
   },
   Old,
 }
@@ -280,6 +283,8 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
             unbound,
             inscription: inscription.payload.clone(),
             vindicated,
+            content_encoding: jubilant && inscription.payload.content_encoding.is_some(),
+            delegate: jubilant && inscription.payload.delegate.is_some(),
           },
         });
 
@@ -505,6 +510,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         unbound,
         inscription: _,
         vindicated,
+        ..
       } => {
         let inscription_number = if cursed {
           let number: i32 = self.cursed_inscription_count.try_into().unwrap();
@@ -664,12 +670,26 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
             unbound,
             inscription,
             vindicated,
-          } => Action::New {
-            cursed,
-            unbound,
-            vindicated,
-            inscription,
-          },
+            content_encoding,
+            delegate,
+          } => {
+            let mut unsupported_flags = 0;
+            if vindicated {
+              UnsupportedType::Vindicated.set(&mut unsupported_flags);
+            }
+            if content_encoding {
+              UnsupportedType::ContentEncoding.set(&mut unsupported_flags);
+            }
+            if delegate {
+              UnsupportedType::Delegate.set(&mut unsupported_flags);
+            }
+            Action::New {
+              cursed,
+              unbound,
+              inscription,
+              unsupported_flags,
+            }
+          }
         },
         old_satpoint: flotsam.old_satpoint,
         new_satpoint: Some(Entry::load(satpoint)),

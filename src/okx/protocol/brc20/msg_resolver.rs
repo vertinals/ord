@@ -32,7 +32,7 @@ impl Message {
       Action::New {
         cursed: false,
         unbound: false,
-        vindicated: false,
+        unsupported_flags: 0,
         inscription: _,
       } if sat_in_outputs => {
         match deserialize_brc20_operation(
