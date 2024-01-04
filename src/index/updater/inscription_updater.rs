@@ -643,7 +643,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       .or_default()
       .push(InscriptionOp {
         txid: flotsam.txid,
-        // TODO by yxq
         sequence_number,
         inscription_number: self
           .sequence_number_to_entry
@@ -661,10 +660,11 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
             reinscription: _,
             unbound,
             inscription,
-            ..
+            vindicated,
           } => Action::New {
             cursed,
             unbound,
+            vindicated,
             inscription,
           },
         },
