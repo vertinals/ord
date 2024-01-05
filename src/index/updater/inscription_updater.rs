@@ -39,7 +39,7 @@ enum Origin {
 }
 
 pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
-  pub(super) operations: HashMap<Txid, Vec<InscriptionOp>>,
+  pub(super) operations: &'a mut HashMap<Txid, Vec<InscriptionOp>>,
   pub(super) blessed_inscription_count: u64,
   pub(super) chain: Chain,
   pub(super) cursed_inscription_count: u64,
@@ -66,11 +66,13 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
   pub(super) timestamp: u32,
   pub(super) unbound_inscriptions: u64,
   pub(super) tx_out_receiver: &'a mut Receiver<TxOut>,
-  pub(super) tx_out_cache: &'a mut HashMap<OutPoint, TxOut>,
+  pub(super) tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
+  pub(super) new_outpoints: Vec<OutPoint>,
 }
 
 impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
   pub(super) fn new(
+    operations: &'a mut HashMap<Txid, Vec<InscriptionOp>>,
     blessed_inscription_count: u64,
     chain: Chain,
     cursed_inscription_count: u64,
@@ -91,10 +93,10 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     timestamp: u32,
     unbound_inscriptions: u64,
     tx_out_receiver: &'a mut Receiver<TxOut>,
-    tx_out_cache: &'a mut HashMap<OutPoint, TxOut>,
+    tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
   ) -> Result<Self> {
     Ok(Self {
-      operations: HashMap::new(),
+      operations,
       blessed_inscription_count,
       chain,
       cursed_inscription_count,
@@ -120,6 +122,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       unbound_inscriptions,
       tx_out_receiver,
       tx_out_cache,
+      new_outpoints: vec![],
     })
   }
   pub(super) fn index_envelopes(
@@ -172,8 +175,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       let current_input_value = if let Some(tx_out) = self.tx_out_cache.get(&tx_in.previous_output)
       {
         tx_out.value
-      } else if let Some(data) = self.outpoint_to_entry.get(&tx_in.previous_output.store())? {
-        TxOut::consensus_decode(&mut io::Cursor::new(data.value()))?.value
       } else {
         let tx_out = self.tx_out_receiver.blocking_recv().ok_or_else(|| {
           anyhow!(
@@ -181,6 +182,12 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
             tx_in.previous_output.txid
           )
         })?;
+        // received new tx out from chain node, add it to new_outpoints first and persist it in db later.
+        #[cfg(not(feature = "cache"))]
+        self.new_outpoints.push(tx_in.previous_output);
+        self
+          .tx_out_cache
+          .insert(tx_in.previous_output, tx_out.clone());
         tx_out.value
       };
 
@@ -362,6 +369,11 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
 
       output_value = end;
 
+      #[cfg(not(feature = "cache"))]
+      self.new_outpoints.push(OutPoint {
+        vout: vout.try_into().unwrap(),
+        txid,
+      });
       self.tx_out_cache.insert(
         OutPoint {
           vout: vout.try_into().unwrap(),
@@ -414,6 +426,28 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       self.reward += total_input_value - output_value;
       Ok(())
     }
+  }
+
+  // write tx_out to outpoint_to_entry table
+  pub(super) fn flush_cache(self) -> Result {
+    let start = Instant::now();
+    let persist = self.new_outpoints.len();
+    let mut entry = Vec::new();
+    for outpoint in self.new_outpoints.into_iter() {
+      let tx_out = self.tx_out_cache.get(&outpoint).unwrap();
+      tx_out.consensus_encode(&mut entry)?;
+      self
+        .outpoint_to_entry
+        .insert(&outpoint.store(), entry.as_slice())?;
+      entry.clear();
+    }
+    log::info!(
+      "flush cache, persist:{}, global:{} cost: {}ms",
+      persist,
+      self.tx_out_cache.len(),
+      start.elapsed().as_millis()
+    );
+    Ok(())
   }
 
   fn calculate_sat(
@@ -602,19 +636,12 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       .or_default()
       .push(InscriptionOp {
         txid: flotsam.txid,
-        inscription_number: {
-          if let Some(number) = self
-            .id_to_sequence_number
-            .get(&flotsam.inscription_id.store())?
-          {
-            self
-              .sequence_number_to_entry
-              .get(number.value())?
-              .map(|entry| InscriptionEntry::load(entry.value()).inscription_number)
-          } else {
-            None
-          }
-        },
+        // TODO by yxq
+        sequence_number,
+        inscription_number: self
+          .sequence_number_to_entry
+          .get(sequence_number)?
+          .map(|entry| InscriptionEntry::load(entry.value()).inscription_number),
         inscription_id: flotsam.inscription_id,
         action: match flotsam.origin {
           Origin::Old => Action::Transfer,
