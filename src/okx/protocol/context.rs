@@ -1,4 +1,4 @@
-use crate::index::{InscriptionEntryValue, InscriptionIdValue, OutPointValue, TxidValue};
+use crate::index::{InscriptionEntryValue, InscriptionIdValue, TxidValue};
 use crate::inscriptions::InscriptionId;
 use crate::okx::datastore::brc20::redb::table::{
   get_balance, get_balances, get_inscribe_transfer_inscription, get_token_info, get_tokens_info,
@@ -13,7 +13,7 @@ use crate::okx::datastore::brc20::{
 use crate::okx::datastore::ord::collections::CollectionKind;
 use crate::okx::datastore::ord::redb::table::{
   get_collection_inscription_id, get_collections_of_inscription, get_transaction_operations,
-  get_txout_by_outpoint, set_inscription_attributes, set_inscription_by_collection_key,
+  set_inscription_attributes, set_inscription_by_collection_key,
 };
 use crate::okx::datastore::ord::redb::table::{
   get_inscription_number_by_sequence_number, save_transaction_operations,
@@ -30,19 +30,16 @@ use redb::Table;
 #[allow(non_snake_case)]
 pub struct Context<'a, 'db, 'txn> {
   pub(crate) chain: BlockContext,
-  pub(crate) tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
-  pub(crate) hit: u64,
-  pub(crate) miss: u64,
+  pub(crate) tx_out_cache: &'a SimpleLru<OutPoint, TxOut>,
 
   // ord tables
-  pub(crate) ORD_TX_TO_OPERATIONS: &'a mut Table<'db, 'txn, &'static TxidValue, &'static [u8]>,
+  pub(crate) ORD_TX_TO_OPERATIONS:
+    Option<&'a mut Table<'db, 'txn, &'static TxidValue, &'static [u8]>>,
   pub(crate) COLLECTIONS_KEY_TO_INSCRIPTION_ID:
     &'a mut Table<'db, 'txn, &'static str, InscriptionIdValue>,
   pub(crate) COLLECTIONS_INSCRIPTION_ID_TO_KINDS:
     &'a mut Table<'db, 'txn, InscriptionIdValue, &'static [u8]>,
-  pub(crate) SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY:
-    &'a mut Table<'db, 'txn, u32, InscriptionEntryValue>,
-  pub(crate) OUTPOINT_TO_ENTRY: &'a mut Table<'db, 'txn, &'static OutPointValue, &'static [u8]>,
+  pub(crate) SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &'a Table<'db, 'txn, u32, InscriptionEntryValue>,
 
   // BRC20 tables
   pub(crate) BRC20_BALANCES: &'a mut Table<'db, 'txn, &'static str, &'static [u8]>,
@@ -76,11 +73,6 @@ impl<'a, 'db, 'txn> OrdReader for Context<'a, 'db, 'txn> {
     network: Network,
   ) -> crate::Result<ScriptKey, Self::Error> {
     if let Some(tx_out) = self.tx_out_cache.get(&satpoint.outpoint) {
-      self.hit += 1;
-      Ok(ScriptKey::from_script(&tx_out.script_pubkey, network))
-    } else if let Some(tx_out) = get_txout_by_outpoint(self.OUTPOINT_TO_ENTRY, &satpoint.outpoint)?
-    {
-      self.miss += 1;
       Ok(ScriptKey::from_script(&tx_out.script_pubkey, network))
     } else {
       Err(anyhow!(
@@ -94,7 +86,7 @@ impl<'a, 'db, 'txn> OrdReader for Context<'a, 'db, 'txn> {
     &self,
     txid: &Txid,
   ) -> crate::Result<Vec<InscriptionOp>, Self::Error> {
-    get_transaction_operations(self.ORD_TX_TO_OPERATIONS, txid)
+    get_transaction_operations(*self.ORD_TX_TO_OPERATIONS.as_ref().unwrap(), txid)
   }
 
   fn get_collections_of_inscription(
@@ -118,7 +110,11 @@ impl<'a, 'db, 'txn> OrdReaderWriter for Context<'a, 'db, 'txn> {
     txid: &Txid,
     operations: &[InscriptionOp],
   ) -> crate::Result<(), Self::Error> {
-    save_transaction_operations(self.ORD_TX_TO_OPERATIONS, txid, operations)
+    save_transaction_operations(
+      *self.ORD_TX_TO_OPERATIONS.as_mut().unwrap(),
+      txid,
+      operations,
+    )
   }
 
   fn set_inscription_by_collection_key(
