@@ -17,6 +17,7 @@ use {
 pub mod balance;
 pub mod cardinals;
 pub mod create;
+mod dump;
 pub mod etch;
 pub mod inscribe;
 pub mod inscriptions;
@@ -62,6 +63,8 @@ pub(crate) enum Subcommand {
   Outputs,
   #[command(about = "List unspent cardinal outputs in wallet")]
   Cardinals,
+  #[command(about = "Dump private key")]
+  Dump(dump::Dump),
 }
 
 impl Wallet {
@@ -79,6 +82,7 @@ impl Wallet {
       Subcommand::Transactions(transactions) => transactions.run(self.name, options),
       Subcommand::Outputs => outputs::run(self.name, options),
       Subcommand::Cardinals => cardinals::run(self.name, options),
+      Subcommand::Dump(dump) => dump.run(self.name, options),
     }
   }
 }
