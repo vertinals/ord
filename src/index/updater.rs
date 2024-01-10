@@ -12,6 +12,7 @@ pub(crate) mod inscription_updater;
 use crate::okx::lru::SimpleLru;
 
 mod rune_updater;
+pub mod pending_updater;
 
 pub(crate) struct BlockData {
   pub(crate) header: Header,

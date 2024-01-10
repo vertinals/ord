@@ -2,7 +2,7 @@ use super::*;
 use crate::okx::datastore::ord::operation::{Action, InscriptionOp};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-enum Curse {
+pub enum Curse {
   DuplicateField,
   IncompleteField,
   NotAtOffsetZero,
@@ -16,15 +16,15 @@ enum Curse {
 
 #[derive(Debug, Clone)]
 pub(super) struct Flotsam {
-  txid: Txid,
-  inscription_id: InscriptionId,
-  offset: u64,
-  old_satpoint: SatPoint,
-  origin: Origin,
+  pub txid: Txid,
+  pub inscription_id: InscriptionId,
+  pub offset: u64,
+  pub old_satpoint: SatPoint,
+  pub origin: Origin,
 }
 
 #[derive(Debug, Clone)]
-enum Origin {
+pub enum Origin {
   New {
     cursed: bool,
     fee: u64,
