@@ -1,4 +1,5 @@
 pub mod table;
+mod pending;
 
 use super::{LowerTick, ScriptKey, Tick};
 use crate::inscriptions::InscriptionId;
