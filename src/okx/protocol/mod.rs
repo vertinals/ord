@@ -5,6 +5,7 @@ pub(crate) mod message;
 pub(crate) mod ord;
 pub(crate) mod protocol_manager;
 pub(crate) mod resolve_manager;
+mod simulate;
 
 pub use self::protocol_manager::ProtocolManager;
 

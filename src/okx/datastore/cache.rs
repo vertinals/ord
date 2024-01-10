@@ -16,15 +16,6 @@ pub enum CacheTableIndex {
     BRC20_INSCRIBE_TRANSFER,
 }
 
-pub struct CacheStateWriteDB<'db, 'a> {
-    ord: CacheWriter<'db, 'a>,
-    btc: CacheWriter<'db, 'a>,
-    brc20: CacheWriter<'db, 'a>,
-    brc20s: CacheWriter<'db, 'a>,
-    _phantom_a: PhantomData<&'a ()>,
-    _phantom_db: PhantomData<&'db ()>,
-}
-
 #[derive(Clone)]
 pub struct MultiCache {
     caches: HashMap<CacheTableIndex, CacheTable>,
@@ -39,11 +30,9 @@ pub struct CacheTable {
 }
 
 #[derive(Clone)]
-pub struct CacheWriter<'db, 'a> {
+pub struct CacheWriter {
     cache: Rc<Cell<Option<MultiCache>>>,
     pub index: Arc<Index>,
-    _phantom_a: PhantomData<&'a ()>,
-    _phantom_db: PhantomData<&'db ()>,
 }
 
 
@@ -53,7 +42,7 @@ pub fn string_to_bytes(s: &str) -> Vec<u8> {
     byte_vec
 }
 
-impl<'db, 'a> CacheWriter<'db, 'a> {
+impl CacheWriter {
     pub fn use_cache<T>(&self, table: CacheTableIndex, f: impl FnOnce(Option<&CacheTable>) -> T) -> T {
         let cache = self.cache.take();
         let m_cache = cache.as_ref().unwrap();

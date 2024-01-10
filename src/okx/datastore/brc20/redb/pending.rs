@@ -7,20 +7,12 @@ use crate::okx::datastore::brc20::redb::table::{get_balance, get_balances, get_i
 use crate::okx::datastore::cache::{CacheTableIndex, CacheWriter, string_to_bytes};
 use crate::okx::datastore::ScriptKey;
 
-pub struct BRC20CacheWrapper<'db, 'a>(CacheWriter<'db, 'a>);
+pub struct BRC20CacheWrapper(CacheWriter);
 
 
-impl<'db, 'a> BRC20CacheWrapper<'db, 'a> {
-    fn get_internal_reader<T>(&self, f: impl FnOnce() -> crate::Result<T>) -> crate::Result<T> {
-        let index = self.0.get_index();
-        let rtx = index.begin_read()?;
-        let rtx = rtx.0;
-        let reader = DataStoreReader::new(&rtx);
-        f(reader)
-    }
-}
+impl BRC20CacheWrapper {}
 
-impl<'db, 'a> Brc20Reader for BRC20CacheWrapper<'db, 'a> {
+impl Brc20Reader for BRC20CacheWrapper {
     type Error = anyhow::Error;
 
     fn get_balances(&self, script_key: &ScriptKey) -> crate::Result<Vec<Balance>, Self::Error> {
@@ -170,7 +162,7 @@ impl<'db, 'a> Brc20Reader for BRC20CacheWrapper<'db, 'a> {
     }
 }
 
-impl<'db, 'a> Brc20ReaderWriter for BRC20CacheWrapper<'db, 'a> {
+impl Brc20ReaderWriter for BRC20CacheWrapper {
     fn update_token_balance(&mut self, script_key: &ScriptKey, new_balance: Balance) -> crate::Result<(), Self::Error> {
         let binding = script_tick_key(script_key, &new_balance.tick);
         let key = binding.as_str();
