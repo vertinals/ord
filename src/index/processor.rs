@@ -207,6 +207,7 @@
 
 
 use std::cell::RefCell;
+use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::Arc;
 use bitcoin::{OutPoint, TxOut};
@@ -222,18 +223,19 @@ pub struct StorageProcessor<'a, 'db, 'tx> {
 
     // pub wtx: &'a mut WriteTransaction<'db>,
 
-    pub(super) home_inscriptions: Rc<RefCell<&'a mut Table<'db, 'tx, u32, InscriptionIdValue>>>,
-    pub(super) id_to_sequence_number: &'a mut Table<'db, 'tx, InscriptionIdValue, u32>,
-    pub(super) inscription_number_to_sequence_number: &'a mut Table<'db, 'tx, i32, u32>,
-    pub(super) outpoint_to_entry: Rc<RefCell<&'a mut Table<'db, 'tx, &'static OutPointValue, &'static [u8]>>>,
+    pub(super) home_inscriptions: Rc<RefCell<Table<'db, 'tx, u32, InscriptionIdValue>>>,
+    pub(super) id_to_sequence_number: Rc<RefCell<Table<'db, 'tx, InscriptionIdValue, u32>>>,
+    pub(super) inscription_number_to_sequence_number: Rc<RefCell<Table<'db, 'tx, i32, u32>>>,
+    pub(super) outpoint_to_entry: Rc<RefCell<Table<'db, 'tx, &'static OutPointValue, &'static [u8]>>>,
     pub(super) transaction_id_to_transaction:
-    &'a mut Table<'db, 'tx, &'static TxidValue, &'static [u8]>,
-    pub(super) sat_to_sequence_number: &'a mut MultimapTable<'db, 'tx, u64, u32>,
+    Rc<RefCell<Table<'db, 'tx, &'static TxidValue, &'static [u8]>>>,
+    pub(super) sat_to_sequence_number: Rc<RefCell<MultimapTable<'db, 'tx, u64, u32>>>,
     pub(super) satpoint_to_sequence_number:
-    &'a mut MultimapTable<'db, 'tx, &'static SatPointValue, u32>,
-    pub(super) sequence_number_to_children: &'a mut MultimapTable<'db, 'tx, u32, u32>,
-    pub(super) sequence_number_to_entry: &'a mut Table<'db, 'tx, u32, InscriptionEntryValue>,
-    pub(super) sequence_number_to_satpoint: Rc<RefCell<&'a mut Table<'db, 'tx, u32, &'static SatPointValue>>>,
+    Rc<RefCell<MultimapTable<'db, 'tx, &'static SatPointValue, u32>>>,
+    pub(super) sequence_number_to_children: Rc<RefCell<MultimapTable<'db, 'tx, u32, u32>>>,
+    pub(super) sequence_number_to_entry: Rc<RefCell<Table<'db, 'tx, u32, InscriptionEntryValue>>>,
+    pub(super) sequence_number_to_satpoint: Rc<RefCell<Table<'db, 'tx, u32, &'static SatPointValue>>>,
+    pub _marker_a: PhantomData<&'a ()>,
 }
 
 unsafe impl<'a, 'db, 'tx> Send for StorageProcessor<'a, 'db, 'tx> {}
@@ -386,7 +388,7 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         Ok(())
     }
     pub(crate) fn outpoint_to_entry_insert(&self, value: &OutPointValue, entry: &[u8]) -> crate::Result<()> {
-        let mut table=self.outpoint_to_entry.borrow_mut();
+        let mut table = self.outpoint_to_entry.borrow_mut();
         table.insert(value, entry)?;
         Ok(())
         // let key = rmp_serde::to_vec(value).unwrap();
