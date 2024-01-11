@@ -9,6 +9,15 @@ use crate::Index;
 pub enum CacheTableIndex {
     TXID_TO_INSCRIPTION_RECEIPTS,
 
+    SEQUENCE_NUMBER_TO_SATPOINT,
+    SAT_TO_SEQUENCE_NUMBER,
+    HOME_INSCRIPTIONS,
+    INSCRIPTION_ID_TO_SEQUENCE_NUMBER,
+    SEQUENCE_NUMBER_TO_CHILDREN,
+    SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY,
+    INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER,
+    OUTPOINT_TO_ENTRY,
+
     BRC20_BALANCES,
     BRC20_TOKEN,
     BRC20_EVENTS,
@@ -27,6 +36,15 @@ pub enum KeyPrefix {}
 #[derive(Clone, Default)]
 pub struct CacheTable {
     pub data: HashMap<Vec<u8>, Vec<u8>>,
+}
+
+impl CacheTable{
+    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
+        self.data.insert(key, value);
+    }
+    pub fn pop_first(&mut self){
+
+    }
 }
 
 #[derive(Clone)]

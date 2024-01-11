@@ -52,6 +52,7 @@ pub(crate) mod updater;
 
 #[cfg(test)]
 pub(crate) mod testing;
+mod simulate;
 
 const SCHEMA_VERSION: u64 = 16;
 
