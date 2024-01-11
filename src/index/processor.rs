@@ -12,34 +12,25 @@ pub struct StorageProcessor {
     pub cache_writer: CacheWriter,
     pub internal: Arc<Index>,
 }
-unsafe impl Send for StorageProcessor{}
-unsafe impl Sync for StorageProcessor{}
 
-impl StorageProcessor {
-    pub(crate) fn next_sequence_number(&self) -> crate::Result<u32> {
-        todo!()
-    }
-}
+unsafe impl Send for StorageProcessor {}
+
+unsafe impl Sync for StorageProcessor {}
+
 
 impl StorageProcessor {
     pub(crate) fn create_context(&self) -> crate::Result<Context> {
         todo!()
     }
-}
-
-impl StorageProcessor {
+    pub(crate) fn next_sequence_number(&self) -> crate::Result<u32> {
+        todo!()
+    }
     pub(crate) fn outpoint_to_sat_ranges_insert(&self, value: &OutPointValue, data: &[u8]) -> crate::Result<()> {
         todo!()
     }
-}
-
-impl StorageProcessor {
     pub(crate) fn outpoint_to_sat_ranges_remove(&self, p0: &OutPointValue) -> crate::Result<Option<Vec<u8>>> {
         todo!()
     }
-}
-
-impl StorageProcessor {
     pub fn get_lost_sats(&self) -> crate::Result<u64> {
         todo!()
     }
