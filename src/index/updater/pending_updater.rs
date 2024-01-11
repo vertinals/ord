@@ -6,8 +6,8 @@ use crate::index::processor::StorageProcessor;
 use crate::index::updater::inscription_updater::{Flotsam, Origin};
 
 
-pub struct PendingUpdater<'a> {
-    processor: &'a mut StorageProcessor,
+pub struct PendingUpdater<'a, 'db> {
+    pub processor: &'a StorageProcessor<'a, 'db>,
     pub(super) operations: &'a mut HashMap<Txid, Vec<InscriptionOp>>,
     pub(super) blessed_inscription_count: u64,
     pub(super) chain: Chain,
@@ -27,7 +27,7 @@ pub struct PendingUpdater<'a> {
     pub(super) new_outpoints: Vec<OutPoint>,
 }
 
-impl<'a> PendingUpdater<'a> {
+impl<'db: 'a, 'a> PendingUpdater<'a, 'db> {
     pub fn new(
         operations: &'a mut HashMap<Txid, Vec<InscriptionOp>>,
         blessed_inscription_count: u64,
@@ -41,7 +41,7 @@ impl<'a> PendingUpdater<'a> {
         unbound_inscriptions: u64,
         tx_out_receiver: &'a mut Receiver<TxOut>,
         tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
-        processor: &'a mut StorageProcessor,
+        processor: &'db StorageProcessor<'a, 'db>,
     ) -> Result<Self> {
         let home_inscriptions_len = processor.home_inscriptions_len();
         Ok(Self {

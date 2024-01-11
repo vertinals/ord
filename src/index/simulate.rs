@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
@@ -14,20 +15,22 @@ use crate::index::entry::{Entry, SatPointValue, SatRange};
 use crate::index::processor::StorageProcessor;
 use crate::index::updater::pending_updater::PendingUpdater;
 use crate::okx::datastore::cache::CacheWriter;
+use crate::okx::datastore::ord::InscriptionOp;
 use crate::okx::datastore::ord::redb::table::get_txout_by_outpoint;
 use crate::okx::lru::SimpleLru;
 use crate::okx::protocol::{BlockContext, ProtocolConfig, ProtocolManager};
 use crate::okx::protocol::context::Context;
 use crate::okx::protocol::trace::IndexTracer;
 
-pub struct Simulator {
+pub struct Simulator<'a, 'db> {
     options: Options,
     simulate_index: IndexTracer,
     internal_index: Arc<Index>,
-    processor: StorageProcessor,
+    _marker_a: PhantomData<&'a ()>,
+    _marker_b: PhantomData<&'db ()>,
 }
 
-impl Simulator {
+impl<'a, 'db> Simulator<'a, 'db> {
     pub fn simulate_tx(&self) {}
 
     // fn index_block(
@@ -321,10 +324,12 @@ impl Simulator {
         &mut self,
         index: &Index,
         height: u32,
-        outpoint_sender: &mut Sender<OutPoint>,
-        tx_out_receiver: &mut Receiver<TxOut>,
+        outpoint_sender: &'a mut Sender<OutPoint>,
+        tx_out_receiver: &'a mut Receiver<TxOut>,
         block: BlockData,
-        tx_out_cache: &mut SimpleLru<OutPoint, TxOut>,
+        tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
+        processor: &'db mut StorageProcessor<'a, 'db>,
+        operations: &'db mut HashMap<Txid, Vec<InscriptionOp>>
     ) -> crate::Result<()> {
         let start = Instant::now();
         let mut sat_ranges_written = 0;
@@ -368,7 +373,7 @@ impl Simulator {
                     } else if tx_out_cache.contains(&prev_output) {
                         cache_outputs_count.fetch_add(1, Ordering::Relaxed);
                         None
-                    } else if let Some(txout) = self.processor.get_txout_by_outpoint(&prev_output).unwrap()
+                    } else if let Some(txout) = processor.get_txout_by_outpoint(&prev_output).unwrap()
                     {
                         miss_outputs_count.fetch_add(1, Ordering::Relaxed);
                         Some((prev_output, Some(txout)))
@@ -387,35 +392,15 @@ impl Simulator {
             }
         }
 
-        let time = timestamp(block.header.time);
+        let mut lost_sats = processor.get_lost_sats()?;
+        let cursed_inscription_count = processor.get_cursed_inscription_count()?;
+        let blessed_inscription_count = processor.get_blessed_inscription_count()?;
+        let unbound_inscriptions = processor.get_unbound_inscriptions()?;
+        let next_sequence_number = processor.next_sequence_number()?;
 
-        log::info!(
-      "Block {} at {} with {} transactions, fetching previous outputs {}/{}…, {},{},{}, cost:{}ms",
-      height,
-      time,
-      block.txdata.len(),
-      fetching_outputs_count.load(Ordering::Relaxed),
-      total_outputs_count.load(Ordering::Relaxed),
-      miss_outputs_count.load(Ordering::Relaxed),
-      meet_outputs_count.load(Ordering::Relaxed),
-      cache_outputs_count.load(Ordering::Relaxed),
-      start.elapsed().as_millis(),
-    );
-
-        let mut lost_sats = self.processor.get_lost_sats()?;
-
-        let cursed_inscription_count = self.processor.get_cursed_inscription_count()?;
-
-        let blessed_inscription_count = self.processor.get_blessed_inscription_count()?;
-
-        let unbound_inscriptions = self.processor.get_unbound_inscriptions()?;
-
-        let next_sequence_number = self.processor.next_sequence_number()?;
-
-        let mut operations = HashMap::new();
-        let mut processor = self.processor.clone();
+        // let processor = &mut self.processor;
         let mut inscription_updater = PendingUpdater::new(
-            &mut operations,
+            operations,
             blessed_inscription_count,
             self.internal_index.options.chain(),
             cursed_inscription_count,
@@ -427,7 +412,7 @@ impl Simulator {
             unbound_inscriptions,
             tx_out_receiver,
             tx_out_cache,
-            &mut processor,
+            processor,
         )?;
 
         let index_sats = true;
@@ -444,26 +429,6 @@ impl Simulator {
                 log::trace!("Indexing transaction {tx_offset}…");
 
                 let mut input_sat_ranges = VecDeque::new();
-
-                // TODO: make sure this is correct
-                // for input in &tx.input {
-                // let key = input.previous_output.store();
-                // let sat_ranges = match self.range_cache.remove(&key) {
-                //     Some(sat_ranges) => {
-                //         self.outputs_cached += 1;
-                //         sat_ranges
-                //     }
-                //     None => outpoint_to_sat_ranges
-                //         .remove(&key)?
-                //         .ok_or_else(|| anyhow!("Could not find outpoint {} in index", input.previous_output))?
-                //         .value()
-                //         .to_vec(),
-                // };
-                //
-                // for chunk in sat_ranges.chunks_exact(11) {
-                //     input_sat_ranges.push_back(SatRange::load(chunk.try_into().unwrap()));
-                // }
-                // }
 
                 self.index_transaction_sats(
                     tx,
@@ -491,12 +456,12 @@ impl Simulator {
             }
 
             if !coinbase_inputs.is_empty() {
-                let mut lost_sat_ranges = self.processor.outpoint_to_sat_ranges_remove(&OutPoint::null().store())?.map(|ranges| ranges.to_vec())
+                let mut lost_sat_ranges = processor.outpoint_to_sat_ranges_remove(&OutPoint::null().store())?.map(|ranges| ranges.to_vec())
                     .unwrap_or_default();
 
                 for (start, end) in coinbase_inputs {
                     if !Sat(start).common() {
-                        self.processor.sat_to_satpoint_insert(
+                        processor.sat_to_satpoint_insert(
                             &start,
                             &SatPoint {
                                 outpoint: OutPoint::null(),
@@ -510,7 +475,7 @@ impl Simulator {
 
                     lost_sats += end - start;
                 }
-                self.processor.outpoint_to_sat_ranges_insert(&OutPoint::null().store(), lost_sat_ranges.as_slice())?;
+                processor.outpoint_to_sat_ranges_insert(&OutPoint::null().store(), lost_sat_ranges.as_slice())?;
             }
         } else if index_inscriptions {
             for (tx, txid) in block.txdata.iter().skip(1).chain(block.txdata.first()) {
@@ -519,12 +484,18 @@ impl Simulator {
         }
         inscription_updater.flush_cache()?;
 
-        let mut context=self.processor.create_context()?;
-        // Create a protocol manager to index the block of bitmap data.
-        let config = ProtocolConfig::new_with_options(&index.options);
-        ProtocolManager::new(config).index_block(&mut context, &block, operations)?;
+        // TODO:
+        // let mut context = processor.create_context()?;
+        // // Create a protocol manager to index the block of bitmap data.
+        // let config = ProtocolConfig::new_with_options(&index.options);
+        // ProtocolManager::new(config).index_block(&mut context, &block, operations.clone())?;
 
         Ok(())
+    }
+
+    fn index_and_execute(&self,){
+
+        self.index_block()
     }
     fn index_transaction_sats(
         &mut self,
@@ -554,7 +525,7 @@ impl Simulator {
                     .ok_or_else(|| anyhow!("insufficient inputs for transaction outputs"))?;
 
                 if !Sat(range.0).common() {
-                    self.processor.sat_to_satpoint_insert(
+                    inscription_updater.processor.sat_to_satpoint_insert(
                         &range.0,
                         &SatPoint {
                             outpoint,
