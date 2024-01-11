@@ -206,6 +206,8 @@
 //////////////////
 
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 use bitcoin::{OutPoint, TxOut};
 use redb::{MultimapTable, RedbValue, Table, WriteTransaction};
@@ -220,10 +222,10 @@ pub struct StorageProcessor<'a, 'db, 'tx> {
 
     // pub wtx: &'a mut WriteTransaction<'db>,
 
-    pub(super) home_inscriptions: &'a mut Table<'db, 'tx, u32, InscriptionIdValue>,
+    pub(super) home_inscriptions: Rc<RefCell<&'a mut Table<'db, 'tx, u32, InscriptionIdValue>>>,
     pub(super) id_to_sequence_number: &'a mut Table<'db, 'tx, InscriptionIdValue, u32>,
     pub(super) inscription_number_to_sequence_number: &'a mut Table<'db, 'tx, i32, u32>,
-    pub(super) outpoint_to_entry: &'a mut Table<'db, 'tx, &'static OutPointValue, &'static [u8]>,
+    pub(super) outpoint_to_entry: Rc<RefCell<&'a mut Table<'db, 'tx, &'static OutPointValue, &'static [u8]>>>,
     pub(super) transaction_id_to_transaction:
     &'a mut Table<'db, 'tx, &'static TxidValue, &'static [u8]>,
     pub(super) sat_to_sequence_number: &'a mut MultimapTable<'db, 'tx, u64, u32>,
@@ -231,7 +233,7 @@ pub struct StorageProcessor<'a, 'db, 'tx> {
     &'a mut MultimapTable<'db, 'tx, &'static SatPointValue, u32>,
     pub(super) sequence_number_to_children: &'a mut MultimapTable<'db, 'tx, u32, u32>,
     pub(super) sequence_number_to_entry: &'a mut Table<'db, 'tx, u32, InscriptionEntryValue>,
-    pub(super) sequence_number_to_satpoint: &'a mut Table<'db, 'tx, u32, &'static SatPointValue>,
+    pub(super) sequence_number_to_satpoint: Rc<RefCell<&'a mut Table<'db, 'tx, u32, &'static SatPointValue>>>,
 }
 
 unsafe impl<'a, 'db, 'tx> Send for StorageProcessor<'a, 'db, 'tx> {}
@@ -284,7 +286,8 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         todo!()
     }
     pub(crate) fn sequence_number_to_satpoint_insert(&self, sequence_number: u32, sat_point: &SatPointValue) -> crate::Result<()> {
-        self.sequence_number_to_satpoint.insert(sequence_number, sat_point)?;
+        let mut table = self.sequence_number_to_satpoint.borrow_mut();
+        table.insert(sequence_number, sat_point)?;
 
         // let key = u32::as_bytes(&sequence_number).to_vec();
         // let value = sat_point.to_vec();
@@ -294,7 +297,8 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         Ok(())
     }
     pub(crate) fn satpoint_to_sequence_number_insert(&self, sat_point: &SatPointValue, sequence: u32) -> crate::Result<()> {
-        self.sequence_number_to_satpoint.insert(sequence, sat_point)?;
+        let mut table = self.sequence_number_to_satpoint.borrow_mut();
+        table.insert(sequence, sat_point)?;
 
         // let key = sat_point.to_vec();
         // let value = u32::as_bytes(&sequence).to_vec();
@@ -304,7 +308,8 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         Ok(())
     }
     pub(crate) fn home_inscriptions_pop_first(&self) -> crate::Result<()> {
-        self.home_inscriptions.pop_first()?;
+        let mut table = self.home_inscriptions.borrow_mut();
+        table.pop_first()?;
 
         // self.cache_writer.use_cache_mut(CacheTableIndex::HOME_INSCRIPTIONS, |v| {
         //     v.pop_first()
@@ -319,8 +324,8 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         // });
         // Ok(())
 
-        self
-            .home_inscriptions
+        let mut table = self.home_inscriptions.borrow_mut();
+        table
             .insert(sequence_number, value)?;
         Ok(())
     }
@@ -381,7 +386,8 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         Ok(())
     }
     pub(crate) fn outpoint_to_entry_insert(&self, value: &OutPointValue, entry: &[u8]) -> crate::Result<()> {
-        self.outpoint_to_entry.insert(value, entry)?;
+        let mut table=self.outpoint_to_entry.borrow_mut();
+        table.insert(value, entry)?;
         Ok(())
         // let key = rmp_serde::to_vec(value).unwrap();
         // let value = entry.to_vec();

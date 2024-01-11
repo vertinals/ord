@@ -1,6 +1,8 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::marker::PhantomData;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
@@ -597,15 +599,15 @@ pub fn test_simulate() {
     let processor = StorageProcessor {
         internal: internal.clone(),
         // wtx: &mut wtx,
-        home_inscriptions: &mut home_inscriptions,
+        home_inscriptions: Rc::new(RefCell::new(&mut home_inscriptions)),
         id_to_sequence_number: &mut inscription_id_to_sequence_number,
         inscription_number_to_sequence_number: &mut inscription_number_to_sequence_number,
-        outpoint_to_entry: &mut outpoint_to_entry,
+        outpoint_to_entry: Rc::new(RefCell::new(&mut outpoint_to_entry)),
         transaction_id_to_transaction: &mut transaction_id_to_transaction,
         sat_to_sequence_number: &mut sat_to_sequence_number,
         satpoint_to_sequence_number: &mut satpoint_to_sequence_number,
         sequence_number_to_children: &mut sequence_number_to_children,
         sequence_number_to_entry: &mut sequence_number_to_inscription_entry,
-        sequence_number_to_satpoint: &mut sequence_number_to_satpoint,
+        sequence_number_to_satpoint: Rc::new(RefCell::new(&mut sequence_number_to_satpoint)),
     };
 }
