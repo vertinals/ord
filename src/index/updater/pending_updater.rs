@@ -2,187 +2,12 @@ use {
     super::*,
     crate::okx::datastore::ord::operation::{Action, InscriptionOp},
 };
+use crate::index::processor::StorageProcessor;
 use crate::index::updater::inscription_updater::{Flotsam, Origin};
-use crate::okx::datastore::cache::{CacheTableIndex, CacheWriter};
 
 
-pub struct PendingStorageProcessor<'a, 'db, 'tx> {
-    // cache_writer: CacheWriter,
-    pub(super) home_inscriptions: &'a mut Table<'db, 'tx, u32, InscriptionIdValue>,
-    pub(super) id_to_sequence_number: &'a mut Table<'db, 'tx, InscriptionIdValue, u32>,
-    pub(super) inscription_number_to_sequence_number: &'a mut Table<'db, 'tx, i32, u32>,
-    pub(super) outpoint_to_entry: &'a mut Table<'db, 'tx, &'static OutPointValue, &'static [u8]>,
-    pub(super) transaction_id_to_transaction:
-    &'a mut Table<'db, 'tx, &'static TxidValue, &'static [u8]>,
-    pub(super) sat_to_sequence_number: &'a mut MultimapTable<'db, 'tx, u64, u32>,
-    pub(super) satpoint_to_sequence_number:
-    &'a mut MultimapTable<'db, 'tx, &'static SatPointValue, u32>,
-    pub(super) sequence_number_to_children: &'a mut MultimapTable<'db, 'tx, u32, u32>,
-    pub(super) sequence_number_to_entry: &'a mut Table<'db, 'tx, u32, InscriptionEntryValue>,
-    pub(super) sequence_number_to_satpoint: &'a mut Table<'db, 'tx, u32, &'static SatPointValue>,
-}
-
-
-impl<'a, 'db, 'tx> PendingStorageProcessor<'a, 'db, 'tx> {
-    pub(crate) fn satpoint_to_sequence_number_remove_all(&mut self, v: &SatPointValue) -> crate::Result<()> {
-        self
-            .satpoint_to_sequence_number
-            .remove_all(v)?;
-        Ok(())
-    }
-    pub fn new(home_inscriptions: &'a mut Table<'db, 'tx, u32, InscriptionIdValue>, id_to_sequence_number: &'a mut Table<'db, 'tx, InscriptionIdValue, u32>, inscription_number_to_sequence_number: &'a mut Table<'db, 'tx, i32, u32>, outpoint_to_entry: &'a mut Table<'db, 'tx, &'static OutPointValue, &'static [u8]>, transaction_id_to_transaction: &'a mut Table<'db, 'tx, &'static TxidValue, &'static [u8]>, sat_to_sequence_number: &'a mut MultimapTable<'db, 'tx, u64, u32>, satpoint_to_sequence_number: &'a mut MultimapTable<'db, 'tx, &'static SatPointValue, u32>, sequence_number_to_children: &'a mut MultimapTable<'db, 'tx, u32, u32>, sequence_number_to_entry: &'a mut Table<'db, 'tx, u32, InscriptionEntryValue>, sequence_number_to_satpoint: &'a mut Table<'db, 'tx, u32, &'static SatPointValue>) -> Self {
-        Self { home_inscriptions, id_to_sequence_number, inscription_number_to_sequence_number, outpoint_to_entry, transaction_id_to_transaction, sat_to_sequence_number, satpoint_to_sequence_number, sequence_number_to_children, sequence_number_to_entry, sequence_number_to_satpoint }
-    }
-}
-
-impl<'a, 'db, 'tx> PendingStorageProcessor<'a, 'db, 'tx> {
-    pub(crate) fn home_inscriptions_len(&self) -> u64 {
-        todo!()
-    }
-}
-
-
-impl<'a, 'db, 'tx> PendingStorageProcessor<'a, 'db, 'tx> {
-    pub(crate) fn sequence_number_to_satpoint_insert(&mut self, sequence_number: u32, sat_point: &SatPointValue) -> crate::Result<()> {
-        self.sequence_number_to_satpoint.insert(sequence_number, sat_point)?;
-        // let key = sequence_number.to_le_bytes().as_slice();
-        // let value = rmp_serde::to_vec(sat_point).unwrap();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::SEQUENCE_NUMBER_TO_SATPOINT, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
-        Ok(())
-    }
-    pub(crate) fn satpoint_to_sequence_number_insert(&mut self, sat_point: &SatPointValue, sequence: u32) -> crate::Result<()> {
-        self.sequence_number_to_satpoint.insert(sequence, sat_point)?;
-        // let key = rmp_serde::to_vec(sat_point).unwrap();
-        // let value = sequence.to_le_bytes().as_slice();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::SAT_TO_SEQUENCE_NUMBER, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        Ok(())
-    }
-    pub(crate) fn home_inscriptions_pop_first(&mut self) -> crate::Result<()> {
-        self.home_inscriptions.pop_first()?;
-        // self.cache_writer.use_cache_mut(CacheTableIndex::HOME_INSCRIPTIONS, |v| {
-        //     v.pop_first()
-        // });
-        // Ok(())
-        Ok(())
-    }
-    pub(crate) fn home_inscriptions_insert(&mut self, sequence_number: &u32, value: InscriptionIdValue) -> crate::Result<()> {
-        // let key = sequnce_number.to_le_bytes().as_slice();
-        // let value = rmp_serde::to_vec(&value).unwrap();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::HOME_INSCRIPTIONS, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
-        self
-            .home_inscriptions
-            .insert(sequence_number, value)?;
-        Ok(())
-    }
-    pub(crate) fn id_to_sequence_number_insert(&mut self, value: &InscriptionIdValue, sequence_number: u32) -> crate::Result<()> {
-        // let key = rmp_serde::to_vec(value).unwrap();
-        // let value = sequence.to_le_bytes().as_slice();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::INSCRIPTION_ID_TO_SEQUENCE_NUMBER, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
-        self
-            .id_to_sequence_number
-            .insert(value, sequence_number)?;
-        Ok(())
-    }
-    pub(crate) fn sequence_number_to_children_insert(&mut self, parent_sequence_number: u32, sequence_number: u32) -> crate::Result<()> {
-        // let key = sequence.to_le_bytes().as_slice();
-        // let value = rmp_serde::to_vec(value).unwrap();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::SEQUENCE_NUMBER_TO_CHILDREN, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
-        self
-            .sequence_number_to_children
-            .insert(parent_sequence_number, sequence_number)?;
-        Ok(())
-    }
-    pub(crate) fn sequence_number_to_entry_insert(&mut self, sequence: u32, value: &InscriptionEntryValue) -> crate::Result<()> {
-        // let key = sequence.to_le_bytes().as_slice();
-        // let value = rmp_serde::to_vec(value).unwrap();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
-        self.sequence_number_to_entry.insert(sequence, value)?;
-        Ok(())
-    }
-    pub(crate) fn sat_to_sequence_number_insert(&mut self, n: &u64, sequence_number: &u32) -> crate::Result<()> {
-        // let key = n.to_le_bytes().as_slice();
-        // let value = sequence.to_le_bytes().as_slice();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::SAT_TO_SEQUENCE_NUMBER, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
-        self.sat_to_sequence_number.insert(n, sequence_number)?;
-        Ok(())
-    }
-    pub(crate) fn inscription_number_to_sequence_number_insert(&mut self, inscription_number: i32, sequence_number: u32) -> crate::Result<()> {
-        // let key = inscription_number.to_le_bytes().as_slice();
-        // let value = sequence_number.to_le_bytes().as_slice();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
-        self
-            .inscription_number_to_sequence_number
-            .insert(inscription_number, sequence_number)?;
-        Ok(())
-    }
-    pub(crate) fn outpoint_to_entry_insert(&mut self, value: &OutPointValue, entry: &[u8]) -> crate::Result<()> {
-        self.outpoint_to_entry.insert(value, entry)?;
-        Ok(())
-        // let key = rmp_serde::to_vec(value).unwrap();
-        // let value = entry.to_vec();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::OUTPOINT_TO_ENTRY, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
-    }
-    pub fn inscriptions_on_output(&mut self, prev_output: &OutPoint) -> crate::Result<Vec<(SatPoint, InscriptionId)>> {
-        let ret = Index::inscriptions_on_output(
-            self.satpoint_to_sequence_number,
-            self.sequence_number_to_entry,
-            prev_output.clone())?;
-        // TODO: twice
-        todo!()
-    }
-
-    pub(crate) fn transaction_id_to_transaction_insert(&mut self, tx_id: &TxidValue, value: &[u8]) -> crate::Result<()> {
-        self
-            .transaction_id_to_transaction
-            .insert(tx_id, value)?;
-
-        Ok(())
-    }
-
-    pub(crate) fn id_to_sequence_number_get(&self, x: InscriptionIdValue) -> crate::Result<Option<u32>> {
-        // TODO,twice
-        let ret = self.id_to_sequence_number.get(x)?.unwrap().value();
-        Ok(Some(ret))
-    }
-    pub fn sequence_number_to_entry_get(&self, initial_inscription_sequence_number: u32) -> crate::Result<Option<InscriptionEntryValue>> {
-        // TODO: twice
-        let ret = self
-            .sequence_number_to_entry
-            .get(initial_inscription_sequence_number)?
-            .unwrap()
-            .value();
-        Ok(Some(ret))
-    }
-}
-
-pub struct PendingUpdater<'a, 'db, 'tx> {
-    processor: &'a mut PendingStorageProcessor<'a, 'db, 'tx>,
+pub struct PendingUpdater<'a> {
+    processor: &'a mut StorageProcessor,
     pub(super) operations: &'a mut HashMap<Txid, Vec<InscriptionOp>>,
     pub(super) blessed_inscription_count: u64,
     pub(super) chain: Chain,
@@ -202,7 +27,7 @@ pub struct PendingUpdater<'a, 'db, 'tx> {
     pub(super) new_outpoints: Vec<OutPoint>,
 }
 
-impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
+impl<'a> PendingUpdater<'a> {
     pub fn new(
         operations: &'a mut HashMap<Txid, Vec<InscriptionOp>>,
         blessed_inscription_count: u64,
@@ -216,7 +41,7 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
         unbound_inscriptions: u64,
         tx_out_receiver: &'a mut Receiver<TxOut>,
         tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
-        processor: &'a mut PendingStorageProcessor<'a, 'db, 'tx>,
+        processor: &'a mut StorageProcessor,
     ) -> Result<Self> {
         let home_inscriptions_len = processor.home_inscriptions_len();
         Ok(Self {

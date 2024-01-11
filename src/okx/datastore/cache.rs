@@ -45,6 +45,14 @@ impl CacheTable{
     pub fn pop_first(&mut self){
 
     }
+    pub fn get(&self, key:Vec<u8>) -> Option<Vec<u8>> {
+        self.data.get(&key).map_or(None,|v|{
+            Some(v.clone())
+        })
+    }
+    pub fn remove(&mut self,key:Vec<u8>){
+        self.data.remove(&key);
+    }
 }
 
 #[derive(Clone)]
