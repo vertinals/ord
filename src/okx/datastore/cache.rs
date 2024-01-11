@@ -38,19 +38,17 @@ pub struct CacheTable {
     pub data: HashMap<Vec<u8>, Vec<u8>>,
 }
 
-impl CacheTable{
+impl CacheTable {
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
         self.data.insert(key, value);
     }
-    pub fn pop_first(&mut self){
-
-    }
-    pub fn get(&self, key:Vec<u8>) -> Option<Vec<u8>> {
-        self.data.get(&key).map_or(None,|v|{
+    pub fn pop_first(&mut self) {}
+    pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
+        self.data.get(&key).map_or(None, |v| {
             Some(v.clone())
         })
     }
-    pub fn remove(&mut self,key:Vec<u8>){
+    pub fn remove(&mut self, key: Vec<u8>) {
         self.data.remove(&key);
     }
 }
@@ -58,7 +56,7 @@ impl CacheTable{
 #[derive(Clone)]
 pub struct CacheWriter {
     cache: Rc<Cell<Option<MultiCache>>>,
-    pub index: Arc<Index>,
+    pub internal_index: Arc<Index>,
 }
 
 
@@ -92,6 +90,9 @@ impl CacheWriter {
         ret
     }
     pub fn get_index(&self) -> Arc<Index> {
-        self.index.clone()
+        self.internal_index.clone()
+    }
+    pub fn new(internal_index: Arc<Index>) -> Self {
+        Self { cache: Default::default(), internal_index }
     }
 }
