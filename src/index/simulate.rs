@@ -368,7 +368,7 @@ impl Simulator {
                     } else if tx_out_cache.contains(&prev_output) {
                         cache_outputs_count.fetch_add(1, Ordering::Relaxed);
                         None
-                    } else if let Some(txout) =self.processor.get_txout_by_outpoint(&prev_output).unwrap()
+                    } else if let Some(txout) = self.processor.get_txout_by_outpoint(&prev_output).unwrap()
                     {
                         miss_outputs_count.fetch_add(1, Ordering::Relaxed);
                         Some((prev_output, Some(txout)))
@@ -491,14 +491,12 @@ impl Simulator {
             }
 
             if !coinbase_inputs.is_empty() {
-                let mut lost_sat_ranges = outpoint_to_sat_ranges
-                    .remove(&OutPoint::null().store())?
-                    .map(|ranges| ranges.value().to_vec())
+                let mut lost_sat_ranges = self.processor.outpoint_to_sat_ranges_remove(&OutPoint::null().store())?.map(|ranges| ranges.to_vec())
                     .unwrap_or_default();
 
                 for (start, end) in coinbase_inputs {
                     if !Sat(start).common() {
-                        sat_to_satpoint.insert(
+                        self.processor.sat_to_satpoint_insert(
                             &start,
                             &SatPoint {
                                 outpoint: OutPoint::null(),
@@ -512,8 +510,7 @@ impl Simulator {
 
                     lost_sats += end - start;
                 }
-
-                outpoint_to_sat_ranges.insert(&OutPoint::null().store(), lost_sat_ranges.as_slice())?;
+                self.processor.outpoint_to_sat_ranges_insert(&OutPoint::null().store(), lost_sat_ranges.as_slice())?;
             }
         } else if index_inscriptions {
             for (tx, txid) in block.txdata.iter().skip(1).chain(block.txdata.first()) {
@@ -522,28 +519,7 @@ impl Simulator {
         }
         inscription_updater.flush_cache()?;
 
-        let mut context = Context {
-            chain: BlockContext {
-                network: index.get_chain_network(),
-                blockheight: height,
-                blocktime: block.header.time,
-            },
-            tx_out_cache,
-            hit: 0,
-            miss: 0,
-            ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS)?,
-            COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?,
-            COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
-                .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?,
-            SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut sequence_number_to_inscription_entry,
-            OUTPOINT_TO_ENTRY: &mut outpoint_to_entry,
-            BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES)?,
-            BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN)?,
-            BRC20_EVENTS: &mut wtx.open_table(BRC20_EVENTS)?,
-            BRC20_TRANSFERABLELOG: &mut wtx.open_table(BRC20_TRANSFERABLELOG)?,
-            BRC20_INSCRIBE_TRANSFER: &mut wtx.open_table(BRC20_INSCRIBE_TRANSFER)?,
-        };
-
+        let mut context=self.processor.create_context()?;
         // Create a protocol manager to index the block of bitmap data.
         let config = ProtocolConfig::new_with_options(&index.options);
         ProtocolManager::new(config).index_block(&mut context, &block, operations)?;

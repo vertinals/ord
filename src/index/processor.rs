@@ -5,34 +5,60 @@ use crate::{Index, InscriptionId, SatPoint};
 use crate::index::entry::SatPointValue;
 use crate::index::{InscriptionEntryValue, InscriptionIdValue, OutPointValue, TxidValue};
 use crate::okx::datastore::cache::{CacheTableIndex, CacheWriter};
+use crate::okx::protocol::context::Context;
 
 #[derive(Clone)]
 pub struct StorageProcessor {
     pub cache_writer: CacheWriter,
     pub internal: Arc<Index>,
 }
+unsafe impl Send for StorageProcessor{}
+unsafe impl Sync for StorageProcessor{}
 
 impl StorageProcessor {
+    pub(crate) fn next_sequence_number(&self) -> crate::Result<u32> {
+        todo!()
+    }
+}
 
-    pub fn get_lost_sats(&self)->crate::Result<u64>{
+impl StorageProcessor {
+    pub(crate) fn create_context(&self) -> crate::Result<Context> {
         todo!()
     }
-    pub fn get_cursed_inscription_count(&self)->crate::Result<u64>{
+}
+
+impl StorageProcessor {
+    pub(crate) fn outpoint_to_sat_ranges_insert(&self, value: &OutPointValue, data: &[u8]) -> crate::Result<()> {
         todo!()
     }
-    pub fn get_blessed_inscription_count(&self)->crate::Result<u64>{
+}
+
+impl StorageProcessor {
+    pub(crate) fn outpoint_to_sat_ranges_remove(&self, p0: &OutPointValue) -> crate::Result<Option<Vec<u8>>> {
         todo!()
     }
-    pub fn get_unbound_inscriptions(&self)->crate::Result<u64>{
+}
+
+impl StorageProcessor {
+    pub fn get_lost_sats(&self) -> crate::Result<u64> {
         todo!()
     }
-    pub fn get_next_sequence_number(&self)->crate::Result<u64>{
+    pub fn get_cursed_inscription_count(&self) -> crate::Result<u64> {
         todo!()
     }
-    pub fn sat_to_satpoint_insert(&mut self,key:&u64,value:&SatPointValue)->crate::Result<()>{
+    pub fn get_blessed_inscription_count(&self) -> crate::Result<u64> {
         todo!()
     }
-    pub fn get_txout_by_outpoint(&self, x: &OutPoint)->crate::Result<Option<TxOut>>{
+    pub fn get_unbound_inscriptions(&self) -> crate::Result<u64> {
+        todo!()
+    }
+    pub fn get_next_sequence_number(&self) -> crate::Result<u64> {
+        todo!()
+    }
+    pub fn sat_to_satpoint_insert(&mut self, key: &u64, value: &SatPointValue) -> crate::Result<()> {
+        todo!()
+    }
+    pub fn get_txout_by_outpoint(&self, x: &OutPoint) -> crate::Result<Option<TxOut>> {
         todo!()
     }
     pub(crate) fn satpoint_to_sequence_number_remove_all(&mut self, v: &SatPointValue) -> crate::Result<()> {
