@@ -5,7 +5,7 @@ pub(crate) mod message;
 pub(crate) mod ord;
 pub(crate) mod protocol_manager;
 pub(crate) mod resolve_manager;
-mod simulate;
+pub mod simulate;
 pub mod trace;
 
 use redb::ReadableTable;

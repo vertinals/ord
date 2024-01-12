@@ -217,7 +217,9 @@ use crate::index::entry::SatPointValue;
 use crate::index::{InscriptionEntryValue, InscriptionIdValue, OutPointValue, TxidValue};
 use crate::okx::datastore::cache::{CacheTableIndex, CacheWriter};
 use crate::okx::protocol::context::Context;
+use crate::okx::protocol::simulate::SimulateContext;
 
+#[derive(Clone)]
 pub struct StorageProcessor<'a, 'db, 'tx> {
     pub internal: Arc<Index>,
 
@@ -245,6 +247,9 @@ unsafe impl<'a, 'db, 'tx> Sync for StorageProcessor<'a, 'db, 'tx> {}
 
 impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
     pub(crate) fn create_context(&self) -> crate::Result<Context> {
+        todo!()
+    }
+    pub(crate) fn create_simulate_context(&self) -> crate::Result<SimulateContext> {
         todo!()
     }
     pub(crate) fn next_sequence_number(&self) -> crate::Result<u32> {

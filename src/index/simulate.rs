@@ -327,11 +327,12 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
     fn index_block(
         &mut self,
         height: u32,
+        index:Index,
         outpoint_sender: &'a mut Sender<OutPoint>,
         tx_out_receiver: &'a mut Receiver<TxOut>,
         block: BlockData,
         tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
-        processor: &'db mut StorageProcessor<'a, 'db, 'tx>,
+        processor:StorageProcessor<'a, 'db, 'tx>,
         operations: &'db mut HashMap<Txid, Vec<InscriptionOp>>,
     ) -> crate::Result<()> {
         let start = Instant::now();
@@ -415,7 +416,7 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
             unbound_inscriptions,
             tx_out_receiver,
             tx_out_cache,
-            processor,
+            processor.clone(),
         )?;
 
         let index_sats = true;
@@ -488,10 +489,10 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
         inscription_updater.flush_cache()?;
 
         // // TODO:
-        // let mut context = processor.create_context()?;
+        let mut context = processor.create_context()?;
         // // // Create a protocol manager to index the block of bitmap data.
-        // let config = ProtocolConfig::new_with_options(&index.options);
-        // ProtocolManager::new(config).index_block(&mut context, &block, operations.clone())?;
+        let config = ProtocolConfig::new_with_options(&index.options);
+        ProtocolManager::new(config).index_block(&mut context, &block, operations.clone())?;
 
         Ok(())
     }
