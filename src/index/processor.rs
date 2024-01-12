@@ -228,6 +228,7 @@ use crate::okx::datastore::ord::redb::table::get_txout_by_outpoint;
 use crate::okx::protocol::context::Context;
 use crate::okx::protocol::simulate::SimulateContext;
 use crate::RpcApi;
+
 #[derive(Clone)]
 pub struct IndexWrapper {
     pub internal: Arc<Index>,
@@ -251,8 +252,6 @@ impl IndexWrapper {
 pub struct StorageProcessor<'a, 'db, 'tx> {
     pub internal: IndexWrapper,
 
-    // pub wtx: Rc<RefCell<WriteTransaction<'db>>>,
-
     pub(super) home_inscriptions: Rc<RefCell<Table<'db, 'tx, u32, InscriptionIdValue>>>,
     pub(super) id_to_sequence_number: Rc<RefCell<Table<'db, 'tx, InscriptionIdValue, u32>>>,
     pub(super) inscription_number_to_sequence_number: Rc<RefCell<Table<'db, 'tx, i32, u32>>>,
@@ -272,7 +271,9 @@ pub struct StorageProcessor<'a, 'db, 'tx> {
     pub statistic_to_count: Rc<RefCell<Table<'db, 'tx, u64, u64>>>,
     pub _marker_a: PhantomData<&'a ()>,
 
-    pub client:Option<DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>>,
+    pub client: Option<DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>>,
+
+    pub context: SimulateContext<'a, 'db, 'tx>,
 }
 
 unsafe impl<'a, 'db, 'tx> Send for StorageProcessor<'a, 'db, 'tx> {}
@@ -285,34 +286,14 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         todo!()
     }
 
-    pub fn get_transaction(&self,tx_id:&Txid)->crate::Result<Transaction>{
-        let client=self.client.as_ref().unwrap();
-        let client=client.get_btc_client();
-        let tx=client.get_raw_transaction(tx_id,None)?;
+    pub fn get_transaction(&self, tx_id: &Txid) -> crate::Result<Transaction> {
+        let client = self.client.as_ref().unwrap();
+        let client = client.get_btc_client();
+        let tx = client.get_raw_transaction(tx_id, None)?;
         Ok(tx)
     }
-    pub(crate) fn create_simulate_context(&self, wtx: &'tx mut WriteTransaction<'db>) -> crate::Result<SimulateContext<'a, 'db, 'tx>> {
-        let h = self.internal.internal.block_height().unwrap().unwrap();
-        let ts = self.internal.internal.block_time(h).unwrap().timestamp().timestamp();
-        let ctx = SimulateContext {
-            network: self.internal.internal.get_chain_network().clone(),
-            current_height: h.0,
-            current_block_time: ts as u32,
-            internal_index: self.internal.clone(),
-            ORD_TX_TO_OPERATIONS: Rc::new(RefCell::new((wtx.open_table(crate::index::ORD_TX_TO_OPERATIONS)?))),
-            COLLECTIONS_KEY_TO_INSCRIPTION_ID: Rc::new(RefCell::new(wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?)),
-            COLLECTIONS_INSCRIPTION_ID_TO_KINDS: Rc::new(RefCell::new((wtx
-                .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?))),
-            SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: Rc::new(RefCell::new((wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)?))),
-            OUTPOINT_TO_ENTRY: Rc::new(RefCell::new((wtx.open_table(OUTPOINT_TO_ENTRY)?))),
-            BRC20_BALANCES: Rc::new(RefCell::new((wtx.open_table(BRC20_BALANCES)?))),
-            BRC20_TOKEN: Rc::new(RefCell::new((wtx.open_table(BRC20_TOKEN)?))),
-            BRC20_EVENTS: Rc::new(RefCell::new((wtx.open_table(BRC20_EVENTS)?))),
-            BRC20_TRANSFERABLELOG: Rc::new(RefCell::new((wtx.open_table(BRC20_TRANSFERABLELOG)?))),
-            BRC20_INSCRIBE_TRANSFER: Rc::new(RefCell::new((wtx.open_table(BRC20_INSCRIBE_TRANSFER)?))),
-            _marker_a: Default::default(),
-        };
-        Ok(ctx)
+    pub(crate) fn create_simulate_context(&self) -> crate::Result<SimulateContext<'a, 'db, 'tx>> {
+        Ok(self.context.clone())
     }
     pub(crate) fn next_sequence_number(&self) -> crate::Result<u32> {
         let table = self.sequence_number_to_inscription_entry.borrow();
@@ -601,7 +582,7 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
             return Ok(Some(v.value()));
         }
         let ret = self.internal.use_internal_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER, |table| {
-            let value=table.get(x).map_err(|e|{
+            let value = table.get(x).map_err(|e| {
                 anyhow!("id_to_sequence_number_get error:{}",e)
             })?;
             if let Some(value) = value {
@@ -621,13 +602,13 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
             return Ok(Some(v.value()));
         }
         let ret = self.internal.use_internal_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, |table| {
-            let ret=table.get(initial_inscription_sequence_number).map_err(move |e| {
+            let ret = table.get(initial_inscription_sequence_number).map_err(move |e| {
                 anyhow!("sequence_number_to_entry_get error:{}",e)
             })?;
-            if let Some(ret)=ret{
-                return Ok(Some(ret.value()))
+            if let Some(ret) = ret {
+                return Ok(Some(ret.value()));
             }
-            return Ok(None)
+            return Ok(None);
         })?;
         if let Some(ret) = ret {
             return Ok(Some(ret));

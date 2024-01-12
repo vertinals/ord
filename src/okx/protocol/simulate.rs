@@ -799,6 +799,7 @@ use crate::okx::datastore::ord::redb::table::{get_collection_inscription_id, get
 use crate::okx::datastore::ScriptKey;
 use crate::okx::protocol::ContextTrait;
 
+#[derive(Clone)]
 pub struct SimulateContext<'a, 'db, 'txn> {
     pub network: Network,
     pub current_height: u32,
