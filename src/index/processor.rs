@@ -214,7 +214,7 @@ use bitcoin::{OutPoint, TxOut};
 use redb::{MultimapTable, RedbValue, Table, WriteTransaction};
 use crate::{Index, InscriptionId, SatPoint};
 use crate::index::entry::SatPointValue;
-use crate::index::{InscriptionEntryValue, InscriptionIdValue, OutPointValue, TxidValue};
+use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, TxidValue};
 use crate::okx::datastore::cache::{CacheTableIndex, CacheWriter};
 use crate::okx::protocol::context::Context;
 use crate::okx::protocol::simulate::SimulateContext;
@@ -223,7 +223,7 @@ use crate::okx::protocol::simulate::SimulateContext;
 pub struct StorageProcessor<'a, 'db, 'tx> {
     pub internal: Arc<Index>,
 
-    // pub wtx: &'a mut WriteTransaction<'db>,
+    // pub wtx: Rc<RefCell<WriteTransaction<'db>>>,
 
     pub(super) home_inscriptions: Rc<RefCell<Table<'db, 'tx, u32, InscriptionIdValue>>>,
     pub(super) id_to_sequence_number: Rc<RefCell<Table<'db, 'tx, InscriptionIdValue, u32>>>,
@@ -249,8 +249,28 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
     pub(crate) fn create_context(&self) -> crate::Result<Context> {
         todo!()
     }
-    pub(crate) fn create_simulate_context(&self) -> crate::Result<SimulateContext> {
-        todo!()
+    pub(crate) fn create_simulate_context(&self, wtx: &'tx mut WriteTransaction<'db>) -> crate::Result<SimulateContext<'a, 'db, 'tx>> {
+        let h = self.internal.block_height().unwrap().unwrap();
+        let ts = self.internal.block_time(h).unwrap().timestamp().timestamp();
+        let ctx = SimulateContext {
+            network: self.internal.get_chain_network().clone(),
+            current_height: h.0,
+            current_block_time: ts as u32,
+            internal_index: self.internal.clone(),
+            ORD_TX_TO_OPERATIONS: Rc::new(RefCell::new((wtx.open_table(crate::index::ORD_TX_TO_OPERATIONS)?))),
+            COLLECTIONS_KEY_TO_INSCRIPTION_ID: Rc::new(RefCell::new(wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?)),
+            COLLECTIONS_INSCRIPTION_ID_TO_KINDS: Rc::new(RefCell::new((wtx
+                .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?))),
+            SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: Rc::new(RefCell::new((wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)?))),
+            OUTPOINT_TO_ENTRY: Rc::new(RefCell::new((wtx.open_table(OUTPOINT_TO_ENTRY)?))),
+            BRC20_BALANCES: Rc::new(RefCell::new((wtx.open_table(BRC20_BALANCES)?))),
+            BRC20_TOKEN: Rc::new(RefCell::new((wtx.open_table(BRC20_TOKEN)?))),
+            BRC20_EVENTS: Rc::new(RefCell::new((wtx.open_table(BRC20_EVENTS)?))),
+            BRC20_TRANSFERABLELOG: Rc::new(RefCell::new((wtx.open_table(BRC20_TRANSFERABLELOG)?))),
+            BRC20_INSCRIBE_TRANSFER: Rc::new(RefCell::new((wtx.open_table(BRC20_INSCRIBE_TRANSFER)?))),
+            _marker_a: Default::default(),
+        };
+        Ok(ctx)
     }
     pub(crate) fn next_sequence_number(&self) -> crate::Result<u32> {
         todo!()

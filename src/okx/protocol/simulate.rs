@@ -739,41 +739,41 @@
 // #[test]
 // pub fn test_asd() {}
 //
-// #[test]
-// fn test_write() {
-//     let tmpfile = NamedTempFile::new().unwrap();
-//     let db = Database::builder()
-//         .create(tmpfile.path())
-//         .unwrap();
-//     let table_definition: TableDefinition<u64, u64> = TableDefinition::new("x");
-//
-//     {
-//         let mut wtx = db.begin_write().unwrap();
-//         let mut table = wtx.open_table(table_definition).unwrap();
-//         table.insert(1, 1).unwrap();
-//         let vv = table.get(&1).unwrap().unwrap().value();
-//         assert_eq!(vv, 1);
-//     }
-//
-//
-//     {
-//         let mut wtx = db.begin_write().unwrap();
-//         let mut table = wtx.open_table(table_definition).unwrap();
-//         table.insert(2, 2).unwrap();
-//         let vv = table.get(&2).unwrap().unwrap().value();
-//         assert_eq!(vv, 2);
-//         let v1 = table.get(&1).unwrap().unwrap().value();
-//         assert_eq!(v1, 1);
-//     }
-//
-//     // wtx.commit().unwrap();
-//     // {
-//     //     let rtx = db.begin_read().unwrap();
-//     //     let table = rtx.open_table(table_definition).unwrap();
-//     //     assert_eq!(table.get(&1).unwrap().unwrap().value(), 1);
-//     // }
-// }
-//
+#[test]
+fn test_write() {
+    let tmpfile = NamedTempFile::new().unwrap();
+    let db = Database::builder()
+        .create(tmpfile.path())
+        .unwrap();
+    let table_definition: TableDefinition<u64, u64> = TableDefinition::new("x");
+
+    {
+        let mut wtx = db.begin_write().unwrap();
+        let mut table = wtx.open_table(table_definition).unwrap();
+        table.insert(1, 1).unwrap();
+        let vv = table.get(&1).unwrap().unwrap().value();
+        assert_eq!(vv, 1);
+    }
+
+
+    {
+        let mut wtx = db.begin_write().unwrap();
+        let mut table = wtx.open_table(table_definition).unwrap();
+        table.insert(2, 2).unwrap();
+        let vv = table.get(&2).unwrap().unwrap().value();
+        assert_eq!(vv, 2);
+        let v1 = table.get(&1).unwrap().unwrap().value();
+        assert_eq!(v1, 1);
+    }
+
+    // wtx.commit().unwrap();
+    // {
+    //     let rtx = db.begin_read().unwrap();
+    //     let table = rtx.open_table(table_definition).unwrap();
+    //     assert_eq!(table.get(&1).unwrap().unwrap().value(), 1);
+    // }
+}
+
 
 //////////
 
@@ -785,7 +785,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use anyhow::anyhow;
 use bitcoin::{Network, Txid};
-use redb::{MultimapTable, ReadOnlyTable, RedbKey, RedbValue, Table, TableDefinition};
+use redb::{Database, MultimapTable, ReadableTable, ReadOnlyTable, RedbKey, RedbValue, Table, TableDefinition, WriteTransaction};
+use tempfile::NamedTempFile;
 use crate::{Index, InscriptionId, SatPoint};
 use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, TxidValue};
 use crate::okx::datastore::brc20::{Balance, Brc20Reader, Brc20ReaderWriter, Receipt, Tick, TokenInfo, TransferableLog, TransferInfo};
@@ -798,7 +799,10 @@ use crate::okx::datastore::ScriptKey;
 use crate::okx::protocol::ContextTrait;
 
 pub struct SimulateContext<'a, 'db, 'txn> {
-    internal_index: Arc<Index>,
+    pub network: Network,
+    pub current_height: u32,
+    pub current_block_time: u32,
+    pub internal_index: Arc<Index>,
     pub(crate) ORD_TX_TO_OPERATIONS: Rc<RefCell<Table<'db, 'txn, &'static TxidValue, &'static [u8]>>>,
     pub(crate) COLLECTIONS_KEY_TO_INSCRIPTION_ID:
     Rc<RefCell<Table<'db, 'txn, &'static str, InscriptionIdValue>>>,
@@ -1148,15 +1152,15 @@ impl<'a, 'db, 'txn> OrdReader for SimulateContext<'a, 'db, 'txn> {
 
 impl<'a, 'db, 'txn> ContextTrait for SimulateContext<'a, 'db, 'txn> {
     fn block_height(&self) -> u32 {
-        todo!()
+        self.current_height
     }
 
     fn network(&self) -> Network {
-        todo!()
+        self.network.clone()
     }
 
     fn block_time(&self) -> u32 {
-        todo!()
+        self.current_block_time
     }
 }
 

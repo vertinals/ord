@@ -327,12 +327,12 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
     fn index_block(
         &mut self,
         height: u32,
-        index:Index,
+        index: Index,
         outpoint_sender: &'a mut Sender<OutPoint>,
         tx_out_receiver: &'a mut Receiver<TxOut>,
         block: BlockData,
         tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
-        processor:StorageProcessor<'a, 'db, 'tx>,
+        processor: StorageProcessor<'a, 'db, 'tx>,
         operations: &'db mut HashMap<Txid, Vec<InscriptionOp>>,
     ) -> crate::Result<()> {
         let start = Instant::now();
@@ -563,7 +563,36 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
 
 #[test]
 pub fn test_simulate() {
-    let internal = Arc::new(Index::open(&Default::default()).unwrap());
+    let opt = crate::options::Options {
+        log_level: Default::default(),
+        log_dir: None,
+        bitcoin_data_dir: None,
+        bitcoin_rpc_pass: Some("bitcoinrpc".to_string()),
+        bitcoin_rpc_user: Some("bitcoinrpc".to_string()),
+        chain_argument: Default::default(),
+        config: None,
+        config_dir: None,
+        cookie_file: None,
+        data_dir: Default::default(),
+        db_cache_size: None,
+        lru_size: 0,
+        first_inscription_height: None,
+        height_limit: None,
+        index: None,
+        index_runes: false,
+        index_sats: true,
+        index_transactions: true,
+        no_index_inscriptions: false,
+        regtest: true,
+        rpc_url: None,
+        signet: false,
+        testnet: false,
+        enable_save_ord_receipts: true,
+        enable_index_bitmap: true,
+        enable_index_brc20: true,
+        first_brc20_height: Some(0),
+    };
+    let internal = Arc::new(Index::open(&opt).unwrap());
     let sim = Simulator {
         options: Default::default(),
         // simulate_index: IndexTracer {},
@@ -572,31 +601,25 @@ pub fn test_simulate() {
         _marker_b: Default::default(),
         _marker_tx: Default::default(),
     };
-    let simulate_index = Index::open(&Options {
-        index: Some(PathBuf::from("./simulate")),
-        index_runes: false,
-        index_sats: true,
-        index_transactions: true,
-        regtest: true,
-        enable_index_brc20: true,
-        ..Default::default()
-    }).unwrap();
+    let mut opt2 = opt.clone();
+    opt2.index = Some(PathBuf::from("./simulate"));
+    let simulate_index = Index::open(&opt2).unwrap();
     let mut wtx = simulate_index.begin_write().unwrap();
-
-    let mut home_inscriptions = wtx.open_table(HOME_INSCRIPTIONS).unwrap();
+    let wtx = Rc::new(RefCell::new(wtx));
+    let binding = wtx.borrow();
+    let mut home_inscriptions = binding.open_table(HOME_INSCRIPTIONS).unwrap();
     let mut inscription_id_to_sequence_number =
-        wtx.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER).unwrap();
+        binding.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER).unwrap();
     let mut inscription_number_to_sequence_number =
-        wtx.open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER).unwrap();
-    let mut sat_to_sequence_number = wtx.open_multimap_table(SAT_TO_SEQUENCE_NUMBER).unwrap();
-    let mut satpoint_to_sequence_number = wtx.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER).unwrap();
-    let mut sequence_number_to_children = wtx.open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN).unwrap();
+        binding.open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER).unwrap();
+    let mut sat_to_sequence_number = binding.open_multimap_table(SAT_TO_SEQUENCE_NUMBER).unwrap();
+    let mut satpoint_to_sequence_number = binding.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER).unwrap();
+    let mut sequence_number_to_children = binding.open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN).unwrap();
     let mut sequence_number_to_inscription_entry =
-        wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap();
-    let mut sequence_number_to_satpoint = wtx.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
-    let mut transaction_id_to_transaction = wtx.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
-    let mut outpoint_to_entry = wtx.open_table(OUTPOINT_TO_ENTRY).unwrap();
-
+        binding.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap();
+    let mut sequence_number_to_satpoint = binding.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
+    let mut transaction_id_to_transaction = binding.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
+    let mut outpoint_to_entry = binding.open_table(OUTPOINT_TO_ENTRY).unwrap();
     let processor = StorageProcessor {
         internal: internal.clone(),
         // wtx: &mut wtx,
