@@ -128,6 +128,9 @@ impl SimulatorServer {
 
         Ok(())
     }
+    pub fn new(internal_index: Arc<Index>, simulate_index: Arc<Index>, client: DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> Self {
+        Self { tx_out_cache: Default::default(), internal_index: IndexWrapper::new(internal_index), simulate_index, client }
+    }
 }
 
 impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
@@ -361,86 +364,108 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
     }
 }
 
-#[test]
-pub fn test_simulate() {
-    let opt = crate::options::Options {
-        log_level: Default::default(),
-        log_dir: None,
-        bitcoin_data_dir: None,
-        bitcoin_rpc_pass: Some("bitcoinrpc".to_string()),
-        bitcoin_rpc_user: Some("bitcoinrpc".to_string()),
-        chain_argument: Default::default(),
-        config: None,
-        config_dir: None,
-        cookie_file: None,
-        data_dir: Default::default(),
-        db_cache_size: None,
-        lru_size: 0,
-        first_inscription_height: None,
-        height_limit: None,
-        index: None,
-        index_runes: false,
-        index_sats: true,
-        index_transactions: true,
-        no_index_inscriptions: false,
-        regtest: true,
-        rpc_url: None,
-        signet: false,
-        testnet: false,
-        enable_save_ord_receipts: true,
-        enable_index_bitmap: true,
-        enable_index_brc20: true,
-        first_brc20_height: Some(0),
-    };
-    let internal = IndexWrapper::new(Arc::new(Index::open(&opt).unwrap()));
-    let mut sim = Simulator {
-        // simulate_index: IndexTracer {},
-        internal_index: internal.clone(),
-        client: None,
-        _marker_a: Default::default(),
-        _marker_b: Default::default(),
-        _marker_tx: Default::default(),
-    };
-    let mut opt2 = opt.clone();
-    opt2.index = Some(PathBuf::from("./simulate"));
-    let simulate_index = Index::open(&opt2).unwrap();
-    let mut wtx = simulate_index.begin_write().unwrap();
-    let wtx = Rc::new(RefCell::new(wtx));
-    let binding = wtx.borrow();
-    let mut home_inscriptions = binding.open_table(HOME_INSCRIPTIONS).unwrap();
-    let mut inscription_id_to_sequence_number =
-        binding.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER).unwrap();
-    let mut inscription_number_to_sequence_number =
-        binding.open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER).unwrap();
-    let mut sat_to_sequence_number = binding.open_multimap_table(SAT_TO_SEQUENCE_NUMBER).unwrap();
-    let mut satpoint_to_sequence_number = binding.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER).unwrap();
-    let mut sequence_number_to_children = binding.open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN).unwrap();
-    let mut sequence_number_to_inscription_entry =
-        binding.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap();
-    let mut sequence_number_to_satpoint = binding.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
-    let mut transaction_id_to_transaction = binding.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
-    let mut outpoint_to_entry = binding.open_table(OUTPOINT_TO_ENTRY).unwrap();
-    let mut OUTPOINT_TO_SAT_RANGES_table = binding.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
-    let sat_to_point = binding.open_table(SAT_TO_SATPOINT).unwrap();
-    let statis_to_count = binding.open_table(STATISTIC_TO_COUNT).unwrap();
-    // let processor = StorageProcessor {
-    //     internal: internal.clone(),
-    //     // wtx: &mut wtx,
-    //     home_inscriptions: Rc::new(RefCell::new(home_inscriptions)),
-    //     id_to_sequence_number: Rc::new(RefCell::new(inscription_id_to_sequence_number)),
-    //     inscription_number_to_sequence_number: Rc::new(RefCell::new(inscription_number_to_sequence_number)),
-    //     outpoint_to_entry: Rc::new(RefCell::new(outpoint_to_entry)),
-    //     transaction_id_to_transaction: Rc::new(RefCell::new(transaction_id_to_transaction)),
-    //     sat_to_sequence_number: Rc::new(RefCell::new(sat_to_sequence_number)),
-    //     satpoint_to_sequence_number: Rc::new(RefCell::new(satpoint_to_sequence_number)),
-    //     sequence_number_to_children: Rc::new(RefCell::new(sequence_number_to_children)),
-    //     sequence_number_to_satpoint: Rc::new(RefCell::new(sequence_number_to_satpoint)),
-    //     sequence_number_to_inscription_entry: Rc::new(RefCell::new((sequence_number_to_inscription_entry))),
-    //     OUTPOINT_TO_SAT_RANGES: Rc::new(RefCell::new(OUTPOINT_TO_SAT_RANGES_table)),
-    //     sat_to_satpoint: Rc::new(RefCell::new((sat_to_point))),
-    //     statistic_to_count: Rc::new(RefCell::new((statis_to_count))),
-    //     _marker_a: Default::default(),
-    //     client: None,
-    //     context: SimulateContext {},
-    // };
+#[cfg(test)]
+mod tests {
+    use indexer_sdk::factory::common::new_client_for_test;
+    use super::*;
+
+    #[test]
+    pub fn test_simulate_tx() {
+        let opt = create_options();
+        let internal = Arc::new(Index::open(&opt).unwrap());
+        let mut opt2 = opt.clone();
+        opt2.index = Some(PathBuf::from("./simulate"));
+        let simulate_index = Index::open(&opt2).unwrap();
+        let client = new_client_for_test("http://localhost:18443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
+        let simulate_server = SimulatorServer::new(internal.clone(), simulate_index.clone(), client);
+    }
+
+    fn create_options() -> Options {
+        let opt = crate::options::Options {
+            log_level: Default::default(),
+            log_dir: None,
+            bitcoin_data_dir: None,
+            bitcoin_rpc_pass: Some("bitcoinrpc".to_string()),
+            bitcoin_rpc_user: Some("bitcoinrpc".to_string()),
+            chain_argument: Default::default(),
+            config: None,
+            config_dir: None,
+            cookie_file: None,
+            data_dir: Default::default(),
+            db_cache_size: None,
+            lru_size: 0,
+            first_inscription_height: None,
+            height_limit: None,
+            index: Some(PathBuf::from("./internal")),
+            index_runes: false,
+            index_sats: true,
+            index_transactions: true,
+            no_index_inscriptions: false,
+            regtest: true,
+            rpc_url: None,
+            signet: false,
+            testnet: false,
+            enable_save_ord_receipts: true,
+            enable_index_bitmap: true,
+            enable_index_brc20: true,
+            first_brc20_height: Some(0),
+        };
+        opt
+    }
+
+    #[test]
+    pub fn test_simulate() {
+        let opt = create_options();
+        let internal = IndexWrapper::new(Arc::new(Index::open(&opt).unwrap()));
+        let mut sim = Simulator {
+            // simulate_index: IndexTracer {},
+            internal_index: internal.clone(),
+            client: None,
+            _marker_a: Default::default(),
+            _marker_b: Default::default(),
+            _marker_tx: Default::default(),
+        };
+        let mut opt2 = opt.clone();
+        opt2.index = Some(PathBuf::from("./simulate"));
+        let simulate_index = Index::open(&opt2).unwrap();
+        let mut wtx = simulate_index.begin_write().unwrap();
+        let wtx = Rc::new(RefCell::new(wtx));
+        let binding = wtx.borrow();
+        let mut home_inscriptions = binding.open_table(HOME_INSCRIPTIONS).unwrap();
+        let mut inscription_id_to_sequence_number =
+            binding.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER).unwrap();
+        let mut inscription_number_to_sequence_number =
+            binding.open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER).unwrap();
+        let mut sat_to_sequence_number = binding.open_multimap_table(SAT_TO_SEQUENCE_NUMBER).unwrap();
+        let mut satpoint_to_sequence_number = binding.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER).unwrap();
+        let mut sequence_number_to_children = binding.open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN).unwrap();
+        let mut sequence_number_to_inscription_entry =
+            binding.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap();
+        let mut sequence_number_to_satpoint = binding.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
+        let mut transaction_id_to_transaction = binding.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
+        let mut outpoint_to_entry = binding.open_table(OUTPOINT_TO_ENTRY).unwrap();
+        let mut OUTPOINT_TO_SAT_RANGES_table = binding.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
+        let sat_to_point = binding.open_table(SAT_TO_SATPOINT).unwrap();
+        let statis_to_count = binding.open_table(STATISTIC_TO_COUNT).unwrap();
+        // let processor = StorageProcessor {
+        //     internal: internal.clone(),
+        //     // wtx: &mut wtx,
+        //     home_inscriptions: Rc::new(RefCell::new(home_inscriptions)),
+        //     id_to_sequence_number: Rc::new(RefCell::new(inscription_id_to_sequence_number)),
+        //     inscription_number_to_sequence_number: Rc::new(RefCell::new(inscription_number_to_sequence_number)),
+        //     outpoint_to_entry: Rc::new(RefCell::new(outpoint_to_entry)),
+        //     transaction_id_to_transaction: Rc::new(RefCell::new(transaction_id_to_transaction)),
+        //     sat_to_sequence_number: Rc::new(RefCell::new(sat_to_sequence_number)),
+        //     satpoint_to_sequence_number: Rc::new(RefCell::new(satpoint_to_sequence_number)),
+        //     sequence_number_to_children: Rc::new(RefCell::new(sequence_number_to_children)),
+        //     sequence_number_to_satpoint: Rc::new(RefCell::new(sequence_number_to_satpoint)),
+        //     sequence_number_to_inscription_entry: Rc::new(RefCell::new((sequence_number_to_inscription_entry))),
+        //     OUTPOINT_TO_SAT_RANGES: Rc::new(RefCell::new(OUTPOINT_TO_SAT_RANGES_table)),
+        //     sat_to_satpoint: Rc::new(RefCell::new((sat_to_point))),
+        //     statistic_to_count: Rc::new(RefCell::new((statis_to_count))),
+        //     _marker_a: Default::default(),
+        //     client: None,
+        //     context: SimulateContext {},
+        // };
+    }
 }
