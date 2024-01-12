@@ -207,6 +207,7 @@
 
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -215,7 +216,7 @@ use bitcoin::{OutPoint, TxOut};
 use redb::{MultimapTable, ReadableTable, ReadOnlyTable, RedbKey, RedbValue, Table, TableDefinition, WriteTransaction};
 use crate::{Index, InscriptionId, SatPoint};
 use crate::index::entry::{Entry, SatPointValue};
-use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, Statistic, STATISTIC_TO_COUNT, TxidValue};
+use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, Statistic, STATISTIC_TO_COUNT, TxidValue};
 use crate::okx::datastore::cache::{CacheTableIndex, CacheWriter};
 use crate::okx::datastore::ord::redb::table::get_txout_by_outpoint;
 use crate::okx::protocol::context::Context;
@@ -480,9 +481,9 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         //     v.insert(key.to_vec(), value.to_vec());
         // });
         // Ok(())
-        // self
-        //     .id_to_sequence_number
-        //     .insert(value, sequence_number)?;
+        let mut table = self.id_to_sequence_number.borrow_mut();
+        table
+            .insert(value, sequence_number)?;
         Ok(())
     }
     pub(crate) fn sequence_number_to_children_insert(&self, parent_sequence_number: u32, sequence_number: u32) -> crate::Result<()> {
@@ -492,9 +493,8 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         //     v.insert(key.to_vec(), value.to_vec());
         // });
         // Ok(())
-        // self
-        //     .sequence_number_to_children
-        //     .insert(parent_sequence_number, sequence_number)?;
+        let mut table = self.sequence_number_to_children.borrow_mut();
+        table.insert(parent_sequence_number, sequence_number)?;
         Ok(())
     }
     pub(crate) fn sequence_number_to_entry_insert(&self, sequence: u32, value: &InscriptionEntryValue) -> crate::Result<()> {
@@ -504,7 +504,8 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         //     v.insert(key.to_vec(), value.to_vec());
         // });
         // Ok(())
-        // self.sequence_number_to_entry.insert(sequence, value)?;
+        let mut table = self.sequence_number_to_inscription_entry.borrow_mut();
+        table.insert(sequence, value)?;
         Ok(())
     }
     pub(crate) fn sat_to_sequence_number_insert(&self, n: &u64, sequence_number: &u32) -> crate::Result<()> {
@@ -514,7 +515,8 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         //     v.insert(key.to_vec(), value.to_vec());
         // });
         // Ok(())
-        // self.sat_to_sequence_number.insert(n, sequence_number)?;
+        let mut table = self.sat_to_sequence_number.borrow_mut();
+        table.insert(n, sequence_number)?;
         Ok(())
     }
     pub(crate) fn inscription_number_to_sequence_number_insert(&self, inscription_number: i32, sequence_number: u32) -> crate::Result<()> {
@@ -524,9 +526,8 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         //     v.insert(key.to_vec(), value.to_vec());
         // });
         // Ok(())
-        // self
-        // .inscription_number_to_sequence_number
-        // .insert(inscription_number, sequence_number)?;
+        let mut table = self.inscription_number_to_sequence_number.borrow_mut();
+        table.insert(inscription_number, sequence_number)?;
         Ok(())
     }
     pub(crate) fn outpoint_to_entry_insert(&self, value: &OutPointValue, entry: &[u8]) -> crate::Result<()> {
@@ -541,12 +542,35 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         // Ok(())
     }
     pub fn inscriptions_on_output(&self, prev_output: &OutPoint) -> crate::Result<Vec<(SatPoint, InscriptionId)>> {
-        // let ret = Index::inscriptions_on_output(
-        // self.satpoint_to_sequence_number,
-        // self.sequence_number_to_entry,
-        // prev_output.clone())?;
-        // TODO: twice
-        todo!()
+        let table = self.satpoint_to_sequence_number.borrow();
+        let satpoint_to_sequence_number = table.deref();
+
+        let table = self.sequence_number_to_inscription_entry.borrow();
+        let sequence_number_to_entry = table.deref();
+        let ret = Index::inscriptions_on_output(
+            satpoint_to_sequence_number,
+            sequence_number_to_entry,
+            prev_output.clone())?;
+
+        let mut set: HashSet<(SatPoint, InscriptionId)> = ret.into_iter()
+            .map(|(k, v)| {
+                (k, v)
+            }).collect();
+
+        let rtx = self.internal.internal.begin_read()?;
+        let satpoint_to_sequence_number = rtx.0.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER)?;
+        let sequence_number_to_entry = rtx.0.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)?;
+        let ret = Index::inscriptions_on_output(
+            &satpoint_to_sequence_number,
+            &sequence_number_to_entry,
+            prev_output.clone())?;
+        for node in ret {
+            if set.contains(&node) {
+                continue;
+            }
+            set.insert(node);
+        }
+        Ok(set.into_iter().collect())
     }
 
     pub(crate) fn transaction_id_to_transaction_insert(&self, tx_id: &TxidValue, value: &[u8]) -> crate::Result<()> {
