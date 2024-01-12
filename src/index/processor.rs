@@ -215,7 +215,7 @@ use bitcoin::{OutPoint, TxOut};
 use redb::{MultimapTable, ReadableTable, ReadOnlyTable, RedbKey, RedbValue, Table, TableDefinition, WriteTransaction};
 use crate::{Index, InscriptionId, SatPoint};
 use crate::index::entry::{Entry, SatPointValue};
-use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, Statistic, STATISTIC_TO_COUNT, TxidValue};
+use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, Statistic, STATISTIC_TO_COUNT, TxidValue};
 use crate::okx::datastore::cache::{CacheTableIndex, CacheWriter};
 use crate::okx::datastore::ord::redb::table::get_txout_by_outpoint;
 use crate::okx::protocol::context::Context;
@@ -415,14 +415,19 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         Ok(ret)
     }
     pub(crate) fn satpoint_to_sequence_number_remove_all(&self, v: &SatPointValue) -> crate::Result<()> {
-        // self
-        //     .satpoint_to_sequence_number
-        //     .remove_all(v)?;
-        // Ok(())
-        todo!()
+        let mut table = self.satpoint_to_sequence_number.borrow_mut();
+        table
+            .remove_all(v)?;
+        Ok(())
     }
     pub(crate) fn home_inscriptions_len(&self) -> u64 {
-        todo!()
+        let table = self.home_inscriptions.borrow();
+        let sim = table.len().unwrap();
+        let ret = self.internal.use_internal_table(HOME_INSCRIPTIONS, |table| {
+            // TODO
+            Ok(table.len().unwrap())
+        }).unwrap();
+        return sim + ret;
     }
     pub(crate) fn sequence_number_to_satpoint_insert(&self, sequence_number: u32, sat_point: &SatPointValue) -> crate::Result<()> {
         let mut table = self.sequence_number_to_satpoint.borrow_mut();
