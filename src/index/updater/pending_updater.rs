@@ -22,7 +22,6 @@ pub struct PendingUpdater<'a, 'db, 'tx> {
     pub(super) transaction_buffer: Vec<u8>,
     pub(super) timestamp: u32,
     pub(super) unbound_inscriptions: u64,
-    pub(super) tx_out_receiver: &'a mut Receiver<TxOut>,
     pub(super) tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
     pub(super) new_outpoints: Vec<OutPoint>,
 }
@@ -39,9 +38,8 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
         lost_sats: u64,
         timestamp: u32,
         unbound_inscriptions: u64,
-        tx_out_receiver: &'a mut Receiver<TxOut>,
         tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
-        processor:  StorageProcessor<'a, 'db, 'tx>,
+        processor: StorageProcessor<'a, 'db, 'tx>,
     ) -> Result<Self> {
         let home_inscriptions_len = processor.home_inscriptions_len();
         Ok(Self {
@@ -60,7 +58,6 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
             transaction_buffer: vec![],
             timestamp,
             unbound_inscriptions,
-            tx_out_receiver,
             tx_out_cache,
             new_outpoints: vec![],
         })
@@ -114,19 +111,7 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
             {
                 tx_out.value
             } else {
-                let tx_out = self.tx_out_receiver.blocking_recv().ok_or_else(|| {
-                    anyhow!(
-            "failed to get transaction for {}",
-            tx_in.previous_output.txid
-          )
-                })?;
-                // received new tx out from chain node, add it to new_outpoints first and persist it in db later.
-                #[cfg(not(feature = "cache"))]
-                self.new_outpoints.push(tx_in.previous_output);
-                self
-                    .tx_out_cache
-                    .insert(tx_in.previous_output, tx_out.clone());
-                tx_out.value
+                panic!("tx_out_cache should have tx_out for input");
             };
 
             total_input_value += current_input_value;

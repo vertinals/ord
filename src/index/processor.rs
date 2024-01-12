@@ -213,7 +213,12 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
 use anyhow::anyhow;
-use bitcoin::{OutPoint, TxOut};
+use bitcoin::{OutPoint, Transaction, Txid, TxOut};
+use indexer_sdk::client::drect::DirectClient;
+use indexer_sdk::client::SyncClient;
+use indexer_sdk::storage::db::memory::MemoryDB;
+use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
+use indexer_sdk::storage::kv::KVStorageProcessor;
 use redb::{MultimapTable, ReadableTable, ReadOnlyTable, RedbKey, RedbValue, Table, TableDefinition, WriteTransaction};
 use crate::{Index, InscriptionId, SatPoint};
 use crate::index::entry::{Entry, SatPointValue};
@@ -222,7 +227,7 @@ use crate::okx::datastore::cache::{CacheTableIndex, CacheWriter};
 use crate::okx::datastore::ord::redb::table::get_txout_by_outpoint;
 use crate::okx::protocol::context::Context;
 use crate::okx::protocol::simulate::SimulateContext;
-
+use crate::RpcApi;
 #[derive(Clone)]
 pub struct IndexWrapper {
     pub internal: Arc<Index>,
@@ -266,6 +271,8 @@ pub struct StorageProcessor<'a, 'db, 'tx> {
 
     pub statistic_to_count: Rc<RefCell<Table<'db, 'tx, u64, u64>>>,
     pub _marker_a: PhantomData<&'a ()>,
+
+    pub client:Option<DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>>,
 }
 
 unsafe impl<'a, 'db, 'tx> Send for StorageProcessor<'a, 'db, 'tx> {}
@@ -276,6 +283,13 @@ unsafe impl<'a, 'db, 'tx> Sync for StorageProcessor<'a, 'db, 'tx> {}
 impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
     pub(crate) fn create_context(&self) -> crate::Result<Context> {
         todo!()
+    }
+
+    pub fn get_transaction(&self,tx_id:&Txid)->crate::Result<Transaction>{
+        let client=self.client.as_ref().unwrap();
+        let client=client.get_btc_client();
+        let tx=client.get_raw_transaction(tx_id,None)?;
+        Ok(tx)
     }
     pub(crate) fn create_simulate_context(&self, wtx: &'tx mut WriteTransaction<'db>) -> crate::Result<SimulateContext<'a, 'db, 'tx>> {
         let h = self.internal.internal.block_height().unwrap().unwrap();
