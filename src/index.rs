@@ -50,6 +50,8 @@ mod reorg;
 mod rtx;
 pub(crate) mod updater;
 
+mod extend;
+
 #[cfg(test)]
 pub(crate) mod testing;
 
@@ -788,7 +790,7 @@ impl Index {
     Ok(())
   }
 
-  fn begin_read(&self) -> Result<rtx::Rtx> {
+  pub(crate) fn begin_read(&self) -> Result<rtx::Rtx> {
     Ok(rtx::Rtx(self.database.begin_read()?))
   }
 
@@ -876,10 +878,6 @@ impl Index {
 
   pub(crate) fn block_hash(&self, height: Option<u32>) -> Result<Option<BlockHash>> {
     self.begin_read()?.block_hash(height)
-  }
-
-  pub(crate) fn latest_block(&self) -> Result<Option<(Height, BlockHash)>> {
-    self.begin_read()?.latest_block()
   }
 
   pub(crate) fn blocks(&self, take: usize) -> Result<Vec<(u32, BlockHash)>> {

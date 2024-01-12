@@ -67,13 +67,15 @@ pub(crate) async fn ord_outpoint(
 ) -> ApiResult<OutPointResult> {
   log::debug!("rpc: get ord_outpoint: {outpoint}");
 
-  let (latest_height, latest_blockhash) = index
+  let rtx = index.begin_read()?;
+
+  let (latest_height, latest_blockhash) = rtx
     .latest_block()
     .ok()
     .flatten()
     .ok_or_api_err(|| ApiError::internal("Failed to get the latest block."))?;
 
-  let inscriptions = index.get_inscriptions_on_output(outpoint)?;
+  let inscriptions = Index::get_inscriptions_on_output_with_rtx(outpoint, &rtx.0)?;
   if inscriptions.is_empty() {
     return Ok(Json(ApiResponse::ok(OutPointResult {
       result: None,
@@ -111,8 +113,7 @@ pub(crate) async fn ord_outpoint(
         .ok_or(anyhow!(
           "Failed to get the inscription number by ID, there may be an error in the database."
         ))?,
-      location: index
-        .get_inscription_satpoint_by_id(id)?
+      location: Index::get_inscription_satpoint_by_id_with_rtx(id, &rtx.0)?
         .ok_or(anyhow!(
           "Failed to get the inscription location, there may be an error in the database."
         ))?
