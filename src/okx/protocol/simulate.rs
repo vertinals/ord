@@ -789,6 +789,7 @@ use redb::{Database, MultimapTable, ReadableTable, ReadOnlyTable, RedbKey, RedbV
 use tempfile::NamedTempFile;
 use crate::{Index, InscriptionId, SatPoint};
 use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, TxidValue};
+use crate::index::processor::IndexWrapper;
 use crate::okx::datastore::brc20::{Balance, Brc20Reader, Brc20ReaderWriter, Receipt, Tick, TokenInfo, TransferableLog, TransferInfo};
 use crate::okx::datastore::brc20::redb::table::{get_balance, get_balances, get_inscribe_transfer_inscription, get_token_info, get_tokens_info, get_transaction_receipts, get_transferable, get_transferable_by_id, get_transferable_by_tick, insert_inscribe_transfer_inscription, insert_token_info, insert_transferable, remove_inscribe_transfer_inscription, remove_transferable, save_transaction_receipts, update_token_balance};
 use crate::okx::datastore::cache::CacheWriter;
@@ -802,7 +803,7 @@ pub struct SimulateContext<'a, 'db, 'txn> {
     pub network: Network,
     pub current_height: u32,
     pub current_block_time: u32,
-    pub internal_index: Arc<Index>,
+    pub internal_index: IndexWrapper,
     pub(crate) ORD_TX_TO_OPERATIONS: Rc<RefCell<Table<'db, 'txn, &'static TxidValue, &'static [u8]>>>,
     pub(crate) COLLECTIONS_KEY_TO_INSCRIPTION_ID:
     Rc<RefCell<Table<'db, 'txn, &'static str, InscriptionIdValue>>>,
@@ -1168,7 +1169,7 @@ impl<'a, 'db, 'txn> SimulateContext<'a, 'db, 'txn> {
     fn use_internal_table<K: RedbKey + 'static, V: RedbValue + 'static, T>(&self,
                                                                            table_def: TableDefinition<K, V>,
                                                                            f: impl FnOnce(ReadOnlyTable<K, V>) -> crate::Result<T>) -> crate::Result<T> {
-        let rtx = self.internal_index.begin_read()?;
+        let rtx = self.internal_index.internal.begin_read()?;
         let table = rtx.0.open_table(table_def)?;
         let ret = f(table);
         ret

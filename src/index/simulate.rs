@@ -15,7 +15,7 @@ use crate::{Index, Options, Rune, RuneEntry, Sat, SatPoint, timestamp};
 use crate::height::Height;
 use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HEIGHT_TO_BLOCK_HEADER, HEIGHT_TO_LAST_SEQUENCE_NUMBER, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, ORD_TX_TO_OPERATIONS, OUTPOINT_TO_ENTRY, OUTPOINT_TO_RUNE_BALANCES, OUTPOINT_TO_SAT_RANGES, RUNE_ID_TO_RUNE_ENTRY, RUNE_TO_RUNE_ID, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_RUNE_ID, SEQUENCE_NUMBER_TO_SATPOINT, Statistic, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_RUNE, TRANSACTION_ID_TO_TRANSACTION};
 use crate::index::entry::{Entry, SatPointValue, SatRange};
-use crate::index::processor::StorageProcessor;
+use crate::index::processor::{IndexWrapper, StorageProcessor};
 use crate::index::updater::pending_updater::PendingUpdater;
 use crate::okx::datastore::cache::CacheWriter;
 use crate::okx::datastore::ord::InscriptionOp;
@@ -28,7 +28,7 @@ use crate::okx::protocol::trace::IndexTracer;
 pub struct Simulator<'a, 'db, 'tx> {
     pub options: Options,
     // pub simulate_index: IndexTracer,
-    pub internal_index: Arc<Index>,
+    pub internal_index: IndexWrapper,
     _marker_a: PhantomData<&'a ()>,
     _marker_b: PhantomData<&'db ()>,
     _marker_tx: PhantomData<&'tx ()>,
@@ -406,10 +406,10 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
         let mut inscription_updater = PendingUpdater::new(
             operations,
             blessed_inscription_count,
-            self.internal_index.options.chain(),
+            self.internal_index.internal.options.chain(),
             cursed_inscription_count,
             height,
-            self.internal_index.index_transactions,
+            self.internal_index.internal.index_transactions,
             next_sequence_number,
             lost_sats,
             block.header.time,
@@ -592,7 +592,7 @@ pub fn test_simulate() {
         enable_index_brc20: true,
         first_brc20_height: Some(0),
     };
-    let internal = Arc::new(Index::open(&opt).unwrap());
+    let internal = IndexWrapper::new(Arc::new(Index::open(&opt).unwrap()));
     let sim = Simulator {
         options: Default::default(),
         // simulate_index: IndexTracer {},
@@ -620,6 +620,9 @@ pub fn test_simulate() {
     let mut sequence_number_to_satpoint = binding.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
     let mut transaction_id_to_transaction = binding.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
     let mut outpoint_to_entry = binding.open_table(OUTPOINT_TO_ENTRY).unwrap();
+    let mut OUTPOINT_TO_SAT_RANGES_table = binding.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
+    let sat_to_point = binding.open_table(SAT_TO_SATPOINT).unwrap();
+    let statis_to_count = binding.open_table(STATISTIC_TO_COUNT).unwrap();
     let processor = StorageProcessor {
         internal: internal.clone(),
         // wtx: &mut wtx,
@@ -631,8 +634,11 @@ pub fn test_simulate() {
         sat_to_sequence_number: Rc::new(RefCell::new(sat_to_sequence_number)),
         satpoint_to_sequence_number: Rc::new(RefCell::new(satpoint_to_sequence_number)),
         sequence_number_to_children: Rc::new(RefCell::new(sequence_number_to_children)),
-        sequence_number_to_entry: Rc::new(RefCell::new(sequence_number_to_inscription_entry)),
         sequence_number_to_satpoint: Rc::new(RefCell::new(sequence_number_to_satpoint)),
+        sequence_number_to_inscription_entry: Rc::new(RefCell::new((sequence_number_to_inscription_entry))),
+        OUTPOINT_TO_SAT_RANGES: Rc::new(RefCell::new(OUTPOINT_TO_SAT_RANGES_table)),
+        sat_to_satpoint: Rc::new(RefCell::new((sat_to_point))),
+        statistic_to_count: Rc::new(RefCell::new((statis_to_count))),
         _marker_a: Default::default(),
     };
 }
