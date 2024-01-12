@@ -59,22 +59,22 @@ impl SimulatorServer {
         let cache = cache.deref_mut();
 
         let mut wtx = self.simulate_index.begin_write()?;
-        let wtx = Rc::new(RefCell::new(wtx));
-        let binding = wtx.borrow();
-        let mut home_inscriptions = binding.open_table(HOME_INSCRIPTIONS).unwrap();
-        let mut inscription_id_to_sequence_number =
+        // let wtx = Rc::new(RefCell::new(wtx));
+        let binding = wtx;
+        let home_inscriptions = binding.open_table(HOME_INSCRIPTIONS).unwrap();
+        let inscription_id_to_sequence_number =
             binding.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER).unwrap();
-        let mut inscription_number_to_sequence_number =
+        let inscription_number_to_sequence_number =
             binding.open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER).unwrap();
-        let mut sat_to_sequence_number = binding.open_multimap_table(SAT_TO_SEQUENCE_NUMBER).unwrap();
-        let mut satpoint_to_sequence_number = binding.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER).unwrap();
-        let mut sequence_number_to_children = binding.open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN).unwrap();
+        let sat_to_sequence_number = binding.open_multimap_table(SAT_TO_SEQUENCE_NUMBER).unwrap();
+        let satpoint_to_sequence_number = binding.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER).unwrap();
+        let sequence_number_to_children = binding.open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN).unwrap();
         let mut sequence_number_to_inscription_entry =
             binding.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap();
-        let mut sequence_number_to_satpoint = binding.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
-        let mut transaction_id_to_transaction = binding.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
-        let mut outpoint_to_entry = binding.open_table(OUTPOINT_TO_ENTRY).unwrap();
-        let mut OUTPOINT_TO_SAT_RANGES_table = binding.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
+        let sequence_number_to_satpoint = binding.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
+        let transaction_id_to_transaction = binding.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
+        let outpoint_to_entry = binding.open_table(OUTPOINT_TO_ENTRY).unwrap();
+        let OUTPOINT_TO_SAT_RANGES_table = binding.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
         let sat_to_point = binding.open_table(SAT_TO_SATPOINT).unwrap();
         let statis_to_count = binding.open_table(STATISTIC_TO_COUNT).unwrap();
 
@@ -102,6 +102,8 @@ impl SimulatorServer {
             header: block.header,
             txdata: vec![(tx.clone(), tx.txid())],
         }, height, cache, processor, &mut operations)?;
+
+        binding.commit()?;
 
         Ok(())
     }
