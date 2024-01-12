@@ -163,7 +163,7 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
                         Some(crate::index::updater::inscription_updater::Curse::Reinscription)
                     } else {
                         let initial_inscription_sequence_number =
-                            self.processor.id_to_sequence_number_get(id.store())?.unwrap();
+                            self.processor.id_to_sequence_number_get(&id.store())?.unwrap();
 
 
                         let entry = InscriptionEntry::load(self.processor.sequence_number_to_entry_get(initial_inscription_sequence_number)?.unwrap());
@@ -414,7 +414,7 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
                     false,
                     self
                         .processor.id_to_sequence_number_get(
-                        inscription_id.store())?
+                        &inscription_id.store())?
                         .unwrap()
                 )
             }
@@ -503,7 +503,7 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
                     Some(parent_id) => {
                         let parent_sequence_number = self
                             .processor.id_to_sequence_number_get(
-                            parent_id.store())?
+                            &parent_id.store())?
                             .unwrap();
                         self
                             .processor.sequence_number_to_children_insert(

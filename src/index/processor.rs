@@ -212,11 +212,12 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
+use anyhow::anyhow;
 use bitcoin::{OutPoint, TxOut};
 use redb::{MultimapTable, ReadableTable, ReadOnlyTable, RedbKey, RedbValue, Table, TableDefinition, WriteTransaction};
 use crate::{Index, InscriptionId, SatPoint};
 use crate::index::entry::{Entry, SatPointValue};
-use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, Statistic, STATISTIC_TO_COUNT, TxidValue};
+use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, Statistic, STATISTIC_TO_COUNT, TxidValue};
 use crate::okx::datastore::cache::{CacheTableIndex, CacheWriter};
 use crate::okx::datastore::ord::redb::table::get_txout_by_outpoint;
 use crate::okx::protocol::context::Context;
@@ -574,27 +575,49 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
     }
 
     pub(crate) fn transaction_id_to_transaction_insert(&self, tx_id: &TxidValue, value: &[u8]) -> crate::Result<()> {
-        // self
-        //     .transaction_id_to_transaction
-        //     .insert(tx_id, value)?;
-
+        let mut table = self.transaction_id_to_transaction.borrow_mut();
+        table.insert(tx_id, value)?;
         Ok(())
     }
 
-    pub(crate) fn id_to_sequence_number_get(&self, x: InscriptionIdValue) -> crate::Result<Option<u32>> {
-        // TODO,twice
-        // let ret = self.id_to_sequence_number.get(x)?.unwrap().value();
-        // Ok(Some(ret))
-        todo!()
+    pub(crate) fn id_to_sequence_number_get(&self, x: &InscriptionIdValue) -> crate::Result<Option<u32>> {
+        let table = self.id_to_sequence_number.borrow();
+        let v = table.get(x)?;
+        if let Some(v) = v {
+            return Ok(Some(v.value()));
+        }
+        let ret = self.internal.use_internal_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER, |table| {
+            let value=table.get(x).map_err(|e|{
+                anyhow!("id_to_sequence_number_get error:{}",e)
+            })?;
+            if let Some(value) = value {
+                return Ok(Some(value.value()));
+            }
+            return Ok(None);
+        })?;
+        if let Some(ret) = ret {
+            return Ok(Some(ret));
+        }
+        Ok(None)
     }
     pub fn sequence_number_to_entry_get(&self, initial_inscription_sequence_number: u32) -> crate::Result<Option<InscriptionEntryValue>> {
-        // TODO: twice
-        // let ret = self
-        //     .sequence_number_to_entry
-        //     .get(initial_inscription_sequence_number)?
-        //     .unwrap()
-        //     .value();
-        // Ok(Some(ret))
-        todo!()
+        let table = self.sequence_number_to_inscription_entry.borrow();
+        let value = table.get(initial_inscription_sequence_number)?;
+        if let Some(v) = value {
+            return Ok(Some(v.value()));
+        }
+        let ret = self.internal.use_internal_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, |table| {
+            let ret=table.get(initial_inscription_sequence_number).map_err(move |e| {
+                anyhow!("sequence_number_to_entry_get error:{}",e)
+            })?;
+            if let Some(ret)=ret{
+                return Ok(Some(ret.value()))
+            }
+            return Ok(None)
+        })?;
+        if let Some(ret) = ret {
+            return Ok(Some(ret));
+        }
+        Ok(None)
     }
 }
