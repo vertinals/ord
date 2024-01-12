@@ -793,7 +793,7 @@ use crate::okx::datastore::brc20::redb::table::{get_balance, get_balances, get_i
 use crate::okx::datastore::cache::CacheWriter;
 use crate::okx::datastore::ord::{InscriptionOp, OrdReader, OrdReaderWriter};
 use crate::okx::datastore::ord::collections::CollectionKind;
-use crate::okx::datastore::ord::redb::table::{get_collection_inscription_id, get_collections_of_inscription, get_inscription_number_by_sequence_number, get_transaction_operations, get_txout_by_outpoint, save_transaction_operations};
+use crate::okx::datastore::ord::redb::table::{get_collection_inscription_id, get_collections_of_inscription, get_inscription_number_by_sequence_number, get_transaction_operations, get_txout_by_outpoint, save_transaction_operations, set_inscription_attributes, set_inscription_by_collection_key};
 use crate::okx::datastore::ScriptKey;
 use crate::okx::protocol::ContextTrait;
 
@@ -1031,11 +1031,17 @@ impl<'a, 'db, 'txn> OrdReaderWriter for SimulateContext<'a, 'db, 'txn> {
     }
 
     fn set_inscription_by_collection_key(&mut self, key: &str, inscription_id: &InscriptionId) -> crate::Result<(), Self::Error> {
-        todo!()
+        let mut table = self.COLLECTIONS_KEY_TO_INSCRIPTION_ID.borrow_mut();
+        set_inscription_by_collection_key(&mut table, key, inscription_id)
     }
 
     fn set_inscription_attributes(&mut self, inscription_id: &InscriptionId, kind: &[CollectionKind]) -> crate::Result<(), Self::Error> {
-        todo!()
+        let mut table = self.COLLECTIONS_INSCRIPTION_ID_TO_KINDS.borrow_mut();
+        set_inscription_attributes(
+            &mut table,
+            inscription_id,
+            kind,
+        )
     }
 }
 
