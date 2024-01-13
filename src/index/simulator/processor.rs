@@ -219,6 +219,7 @@ use indexer_sdk::client::SyncClient;
 use indexer_sdk::storage::db::memory::MemoryDB;
 use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
+use log::info;
 use redb::{MultimapTable, ReadableTable, ReadOnlyTable, RedbKey, RedbValue, Table, TableDefinition, WriteTransaction};
 use crate::{Index, InscriptionId, SatPoint};
 use crate::index::entry::{Entry, SatPointValue};
@@ -286,11 +287,11 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         todo!()
     }
 
-    pub fn get_transaction(&self, tx_id: &Txid) -> crate::Result<Transaction> {
+    pub fn get_transaction(&self, tx_id: &Txid) -> crate::Result<Option<Transaction>> {
+        info!("get_transaction: {:?}", tx_id);
         let client = self.client.as_ref().unwrap();
-        let client = client.get_btc_client();
-        let tx = client.get_raw_transaction(tx_id, None)?;
-        Ok(tx)
+        let ret=client.get_transaction_by_tx_id(tx_id.clone())?;
+        Ok(ret)
     }
     pub(crate) fn create_simulate_context(&self) -> crate::Result<SimulateContext<'a, 'db, 'tx>> {
         Ok(self.context.clone())

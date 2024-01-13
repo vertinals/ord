@@ -789,10 +789,9 @@ use redb::{Database, MultimapTable, ReadableTable, ReadOnlyTable, RedbKey, RedbV
 use tempfile::NamedTempFile;
 use crate::{Index, InscriptionId, SatPoint};
 use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, TxidValue};
-use crate::index::processor::IndexWrapper;
+use crate::index::simulator::processor::IndexWrapper;
 use crate::okx::datastore::brc20::{Balance, Brc20Reader, Brc20ReaderWriter, Receipt, Tick, TokenInfo, TransferableLog, TransferInfo};
 use crate::okx::datastore::brc20::redb::table::{get_balance, get_balances, get_inscribe_transfer_inscription, get_token_info, get_tokens_info, get_transaction_receipts, get_transferable, get_transferable_by_id, get_transferable_by_tick, insert_inscribe_transfer_inscription, insert_token_info, insert_transferable, remove_inscribe_transfer_inscription, remove_transferable, save_transaction_receipts, update_token_balance};
-use crate::okx::datastore::cache::CacheWriter;
 use crate::okx::datastore::ord::{InscriptionOp, OrdReader, OrdReaderWriter};
 use crate::okx::datastore::ord::collections::CollectionKind;
 use crate::okx::datastore::ord::redb::table::{get_collection_inscription_id, get_collections_of_inscription, get_inscription_number_by_sequence_number, get_transaction_operations, get_txout_by_outpoint, save_transaction_operations, set_inscription_attributes, set_inscription_by_collection_key};

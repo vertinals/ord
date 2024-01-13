@@ -2,7 +2,7 @@ use {
     super::*,
     crate::okx::datastore::ord::operation::{Action, InscriptionOp},
 };
-use crate::index::processor::StorageProcessor;
+use crate::index::simulator::processor::StorageProcessor;
 use crate::index::updater::inscription_updater::{Flotsam, Origin};
 
 

@@ -13,12 +13,14 @@ use indexer_sdk::client::SyncClient;
 use indexer_sdk::storage::db::memory::MemoryDB;
 use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
-use redb::{ReadableTable};
+use log::{error, info};
+use redb::{ReadableTable, WriteTransaction};
 use crate::{Index, Options, Rune, RuneEntry, Sat, SatPoint, timestamp};
 use crate::height::Height;
 use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HEIGHT_TO_BLOCK_HEADER, HEIGHT_TO_LAST_SEQUENCE_NUMBER, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, OUTPOINT_TO_ENTRY, OUTPOINT_TO_RUNE_BALANCES, OUTPOINT_TO_SAT_RANGES, RUNE_ID_TO_RUNE_ENTRY, RUNE_TO_RUNE_ID, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_RUNE_ID, SEQUENCE_NUMBER_TO_SATPOINT, Statistic, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_RUNE, TRANSACTION_ID_TO_TRANSACTION};
 use crate::index::entry::{Entry, SatPointValue, SatRange};
-use crate::index::processor::{IndexWrapper, StorageProcessor};
+use crate::index::simulator::error::SimulateError;
+use crate::index::simulator::processor::{IndexWrapper, StorageProcessor};
 use crate::index::updater::pending_updater::PendingUpdater;
 use crate::okx::datastore::ord::InscriptionOp;
 use crate::okx::lru::SimpleLru;
@@ -42,38 +44,35 @@ pub struct SimulatorServer {
 }
 
 impl SimulatorServer {
-    pub fn simulate_tx(&self, tx: &Transaction) -> crate::Result<()> {
-        let mut sim = Simulator {
-            internal_index: self.internal_index.clone(),
-            client: None,
-            _marker_a: Default::default(),
-            _marker_b: Default::default(),
-            _marker_tx: Default::default(),
-        };
+    pub fn execute_tx(&self, tx: &Transaction, commit: bool) -> crate::Result<(),SimulateError> {
+        let mut wtx = self.simulate_index.begin_write()?;
+        self.simulate_tx(tx, &wtx)?;
+        if commit {
+            wtx.commit()?;
+        }
+
+        Ok(())
+    }
+
+    fn simulate_tx(&self, tx: &Transaction, wtx: &WriteTransaction) -> crate::Result<(),SimulateError> {
         let height = self.internal_index.internal.block_count()?;
         let block = self.internal_index.internal.get_block_by_height(height)?.unwrap();
-        let mut cache = self.tx_out_cache.borrow_mut();
-        let cache = cache.deref_mut();
-
-        let mut wtx = self.simulate_index.begin_write()?;
-        // let wtx = Rc::new(RefCell::new(wtx));
-        let mut binding = wtx;
-        let home_inscriptions = binding.open_table(HOME_INSCRIPTIONS).unwrap();
+        let home_inscriptions = wtx.open_table(HOME_INSCRIPTIONS).unwrap();
         let inscription_id_to_sequence_number =
-            binding.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER).unwrap();
+            wtx.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER).unwrap();
         let inscription_number_to_sequence_number =
-            binding.open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER).unwrap();
-        let sat_to_sequence_number = binding.open_multimap_table(SAT_TO_SEQUENCE_NUMBER).unwrap();
-        let satpoint_to_sequence_number = binding.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER).unwrap();
-        let sequence_number_to_children = binding.open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN).unwrap();
+            wtx.open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER).unwrap();
+        let sat_to_sequence_number = wtx.open_multimap_table(SAT_TO_SEQUENCE_NUMBER).unwrap();
+        let satpoint_to_sequence_number = wtx.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER).unwrap();
+        let sequence_number_to_children = wtx.open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN).unwrap();
         let mut sequence_number_to_inscription_entry =
-            Rc::new(RefCell::new(binding.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap()));
-        let sequence_number_to_satpoint = binding.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
-        let transaction_id_to_transaction = binding.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
-        let outpoint_to_entry = Rc::new((RefCell::new(binding.open_table(OUTPOINT_TO_ENTRY).unwrap())));
-        let OUTPOINT_TO_SAT_RANGES_table = binding.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
-        let sat_to_point = binding.open_table(SAT_TO_SATPOINT).unwrap();
-        let statis_to_count = binding.open_table(STATISTIC_TO_COUNT).unwrap();
+            Rc::new(RefCell::new(wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap()));
+        let sequence_number_to_satpoint = wtx.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
+        let transaction_id_to_transaction = wtx.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
+        let outpoint_to_entry = Rc::new((RefCell::new(wtx.open_table(OUTPOINT_TO_ENTRY).unwrap())));
+        let OUTPOINT_TO_SAT_RANGES_table = wtx.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
+        let sat_to_point = wtx.open_table(SAT_TO_SATPOINT).unwrap();
+        let statis_to_count = wtx.open_table(STATISTIC_TO_COUNT).unwrap();
 
         let h = height;
         let ts = block.header.time;
@@ -82,17 +81,17 @@ impl SimulatorServer {
             current_height: h,
             current_block_time: ts as u32,
             internal_index: self.internal_index.clone(),
-            ORD_TX_TO_OPERATIONS: Rc::new(RefCell::new((binding.open_table(crate::index::ORD_TX_TO_OPERATIONS)?))),
-            COLLECTIONS_KEY_TO_INSCRIPTION_ID: Rc::new(RefCell::new(binding.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?)),
-            COLLECTIONS_INSCRIPTION_ID_TO_KINDS: Rc::new(RefCell::new((binding
+            ORD_TX_TO_OPERATIONS: Rc::new(RefCell::new((wtx.open_table(crate::index::ORD_TX_TO_OPERATIONS)?))),
+            COLLECTIONS_KEY_TO_INSCRIPTION_ID: Rc::new(RefCell::new(wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?)),
+            COLLECTIONS_INSCRIPTION_ID_TO_KINDS: Rc::new(RefCell::new((wtx
                 .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?))),
             SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: sequence_number_to_inscription_entry.clone(),
             OUTPOINT_TO_ENTRY: outpoint_to_entry.clone(),
-            BRC20_BALANCES: Rc::new(RefCell::new((binding.open_table(BRC20_BALANCES)?))),
-            BRC20_TOKEN: Rc::new(RefCell::new((binding.open_table(BRC20_TOKEN)?))),
-            BRC20_EVENTS: Rc::new(RefCell::new((binding.open_table(BRC20_EVENTS)?))),
-            BRC20_TRANSFERABLELOG: Rc::new(RefCell::new((binding.open_table(BRC20_TRANSFERABLELOG)?))),
-            BRC20_INSCRIBE_TRANSFER: Rc::new(RefCell::new((binding.open_table(BRC20_INSCRIBE_TRANSFER)?))),
+            BRC20_BALANCES: Rc::new(RefCell::new((wtx.open_table(BRC20_BALANCES)?))),
+            BRC20_TOKEN: Rc::new(RefCell::new((wtx.open_table(BRC20_TOKEN)?))),
+            BRC20_EVENTS: Rc::new(RefCell::new((wtx.open_table(BRC20_EVENTS)?))),
+            BRC20_TRANSFERABLELOG: Rc::new(RefCell::new((wtx.open_table(BRC20_TRANSFERABLELOG)?))),
+            BRC20_INSCRIBE_TRANSFER: Rc::new(RefCell::new((wtx.open_table(BRC20_INSCRIBE_TRANSFER)?))),
             _marker_a: Default::default(),
         };
 
@@ -116,20 +115,67 @@ impl SimulatorServer {
             client: Some(self.client.clone()),
             context: ctx,
         };
+
+        self.loop_simulate_tx(&processor, &tx)?;
+        Ok(())
+    }
+    pub fn loop_simulate_tx(&self, processor: &StorageProcessor, tx: &Transaction) -> crate::Result<(),SimulateError> {
+        let tx_id = tx.txid();
+        let mut need_handle_first = vec![];
+        for input in &tx.input {
+            if input.previous_output.is_null() {
+                continue;
+            }
+            let prev_tx_id = &input.previous_output.txid;
+            let prev_out = processor.get_txout_by_outpoint(&input.previous_output)?;
+            if prev_out.is_none() {
+                need_handle_first.push(prev_tx_id);
+            }
+        }
+        if need_handle_first.is_empty() {
+            info!("parent suits is ready,start to simulate tx:{:?}",&tx_id);
+        }
+        for parent in need_handle_first {
+            let parent_tx = processor.get_transaction(&parent)?;
+            if parent_tx.is_none() {
+                error!("parent tx not exist,tx_hash:{:?},child_hash:{:?}",&parent,&tx_id);
+                return Err(SimulateError::TxNotFound(parent.clone()))
+            }
+            let parent_tx = parent_tx.unwrap();
+            info!("parent tx :{:?},exist,but not in utxo data,child_hash:{:?},need to simulate parent tx",&parent,&tx_id);
+            self.loop_simulate_tx(processor, &parent_tx)?;
+            info!("parent tx {:?} simulate done,start to simulate child_hash:{:?}",&parent,&tx_id);
+        }
+        self.do_simulate_tx(processor, &tx)?;
+
+        Ok(())
+    }
+
+    pub fn do_simulate_tx(&self, processor: &StorageProcessor, tx: &Transaction) -> crate::Result<(),SimulateError> {
+        let mut sim = Simulator {
+            internal_index: self.internal_index.clone(),
+            client: None,
+            _marker_a: Default::default(),
+            _marker_b: Default::default(),
+            _marker_tx: Default::default(),
+        };
+        let height = self.internal_index.internal.block_count()?;
+        let block = self.internal_index.internal.get_block_by_height(height)?.unwrap();
+        let mut cache = self.tx_out_cache.borrow_mut();
+        let cache = cache.deref_mut();
+
         let mut operations: HashMap<Txid, Vec<InscriptionOp>> = HashMap::new();
         let block = BlockData {
             header: block.header,
             txdata: vec![(tx.clone(), tx.txid())],
         };
-        sim.index_block(block.clone(), height, cache, processor, &mut operations)?;
-
-
-        binding.commit()?;
+        sim.index_block(block.clone(), height, cache, &processor, &mut operations)?;
 
         Ok(())
     }
+
     pub fn new(internal_index: Arc<Index>, simulate_index: Arc<Index>, client: DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> Self {
-        Self { tx_out_cache: Default::default(), internal_index: IndexWrapper::new(internal_index), simulate_index, client }
+        Self { tx_out_cache: Rc::new(RefCell::new(SimpleLru::new(500))), internal_index: IndexWrapper::new(internal_index), simulate_index, client }
     }
 }
 
@@ -139,7 +185,7 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
         block: BlockData,
         height: u32,
         tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
-        processor: StorageProcessor<'a, 'db, 'tx>,
+        processor: &StorageProcessor<'a, 'db, 'tx>,
         operations: &'a mut HashMap<Txid, Vec<InscriptionOp>>,
     ) -> crate::Result<()> {
         let mut sat_ranges_written = 0;
@@ -191,7 +237,7 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
                 if let Some(tx_out) = value {
                     tx_out_cache.insert(out_point, tx_out);
                 } else {
-                    let tx = processor.get_transaction(&out_point.txid)?;
+                    let tx = processor.get_transaction(&out_point.txid)?.unwrap();
                     let out = tx.output[out_point.vout as usize].clone();
                     let tx_out = TxOut {
                         value: out.value,
@@ -300,8 +346,6 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
         Ok(())
     }
 
-
-    fn index_and_execute(&self) {}
     fn index_transaction_sats(
         &mut self,
         tx: &Transaction,
@@ -366,18 +410,30 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+    use bitcoincore_rpc::RpcApi;
     use indexer_sdk::factory::common::new_client_for_test;
+    use log::LevelFilter;
     use super::*;
 
     #[test]
     pub fn test_simulate_tx() {
+        env_logger::builder()
+            .filter_level(LevelFilter::Debug)
+            .format_target(false)
+            .init();
         let opt = create_options();
         let internal = Arc::new(Index::open(&opt).unwrap());
         let mut opt2 = opt.clone();
         opt2.index = Some(PathBuf::from("./simulate"));
-        let simulate_index = Index::open(&opt2).unwrap();
+        let simulate_index = Arc::new(Index::open(&opt2).unwrap());
         let client = new_client_for_test("http://localhost:18443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
-        let simulate_server = SimulatorServer::new(internal.clone(), simulate_index.clone(), client);
+        let simulate_server = SimulatorServer::new(internal.clone(), simulate_index.clone(), client.clone());
+
+        let client = client.clone().get_btc_client();
+        let tx = client.get_raw_transaction(&Txid::from_str("f2ecd8708afbb0056709333a60882536c7d070633e1ee7cf80d83ad35e1f8403").unwrap(), None).unwrap();
+        println!("{:?}", tx);
+        simulate_server.execute_tx(&tx, true).unwrap();
     }
 
     fn create_options() -> Options {
@@ -411,61 +467,5 @@ mod tests {
             first_brc20_height: Some(0),
         };
         opt
-    }
-
-    #[test]
-    pub fn test_simulate() {
-        let opt = create_options();
-        let internal = IndexWrapper::new(Arc::new(Index::open(&opt).unwrap()));
-        let mut sim = Simulator {
-            // simulate_index: IndexTracer {},
-            internal_index: internal.clone(),
-            client: None,
-            _marker_a: Default::default(),
-            _marker_b: Default::default(),
-            _marker_tx: Default::default(),
-        };
-        let mut opt2 = opt.clone();
-        opt2.index = Some(PathBuf::from("./simulate"));
-        let simulate_index = Index::open(&opt2).unwrap();
-        let mut wtx = simulate_index.begin_write().unwrap();
-        let wtx = Rc::new(RefCell::new(wtx));
-        let binding = wtx.borrow();
-        let mut home_inscriptions = binding.open_table(HOME_INSCRIPTIONS).unwrap();
-        let mut inscription_id_to_sequence_number =
-            binding.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER).unwrap();
-        let mut inscription_number_to_sequence_number =
-            binding.open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER).unwrap();
-        let mut sat_to_sequence_number = binding.open_multimap_table(SAT_TO_SEQUENCE_NUMBER).unwrap();
-        let mut satpoint_to_sequence_number = binding.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER).unwrap();
-        let mut sequence_number_to_children = binding.open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN).unwrap();
-        let mut sequence_number_to_inscription_entry =
-            binding.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap();
-        let mut sequence_number_to_satpoint = binding.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
-        let mut transaction_id_to_transaction = binding.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
-        let mut outpoint_to_entry = binding.open_table(OUTPOINT_TO_ENTRY).unwrap();
-        let mut OUTPOINT_TO_SAT_RANGES_table = binding.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
-        let sat_to_point = binding.open_table(SAT_TO_SATPOINT).unwrap();
-        let statis_to_count = binding.open_table(STATISTIC_TO_COUNT).unwrap();
-        // let processor = StorageProcessor {
-        //     internal: internal.clone(),
-        //     // wtx: &mut wtx,
-        //     home_inscriptions: Rc::new(RefCell::new(home_inscriptions)),
-        //     id_to_sequence_number: Rc::new(RefCell::new(inscription_id_to_sequence_number)),
-        //     inscription_number_to_sequence_number: Rc::new(RefCell::new(inscription_number_to_sequence_number)),
-        //     outpoint_to_entry: Rc::new(RefCell::new(outpoint_to_entry)),
-        //     transaction_id_to_transaction: Rc::new(RefCell::new(transaction_id_to_transaction)),
-        //     sat_to_sequence_number: Rc::new(RefCell::new(sat_to_sequence_number)),
-        //     satpoint_to_sequence_number: Rc::new(RefCell::new(satpoint_to_sequence_number)),
-        //     sequence_number_to_children: Rc::new(RefCell::new(sequence_number_to_children)),
-        //     sequence_number_to_satpoint: Rc::new(RefCell::new(sequence_number_to_satpoint)),
-        //     sequence_number_to_inscription_entry: Rc::new(RefCell::new((sequence_number_to_inscription_entry))),
-        //     OUTPOINT_TO_SAT_RANGES: Rc::new(RefCell::new(OUTPOINT_TO_SAT_RANGES_table)),
-        //     sat_to_satpoint: Rc::new(RefCell::new((sat_to_point))),
-        //     statistic_to_count: Rc::new(RefCell::new((statis_to_count))),
-        //     _marker_a: Default::default(),
-        //     client: None,
-        //     context: SimulateContext {},
-        // };
     }
 }
