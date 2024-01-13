@@ -5,7 +5,6 @@ use super::{
 
 use crate::okx::datastore::brc20::{Brc20Reader, Brc20ReaderWriter};
 use crate::okx::datastore::ord::OrdReader;
-use crate::okx::protocol::context::Context;
 use crate::{
     okx::{
         datastore::brc20::{

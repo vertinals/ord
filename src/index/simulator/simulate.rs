@@ -14,7 +14,7 @@ use indexer_sdk::storage::db::memory::MemoryDB;
 use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
 use log::{error, info};
-use redb::{ReadableTable, WriteTransaction};
+use redb::{ WriteTransaction};
 use crate::{Index, Options, Sat, SatPoint};
 use crate::height::Height;
 use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, OUTPOINT_TO_ENTRY, OUTPOINT_TO_SAT_RANGES, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_SATPOINT, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION};
@@ -68,7 +68,7 @@ impl SimulatorServer {
             Rc::new(RefCell::new(wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap()));
         let sequence_number_to_satpoint = wtx.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
         let transaction_id_to_transaction = wtx.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
-        let outpoint_to_entry = Rc::new((RefCell::new(wtx.open_table(OUTPOINT_TO_ENTRY).unwrap())));
+        let outpoint_to_entry = Rc::new(RefCell::new(wtx.open_table(OUTPOINT_TO_ENTRY).unwrap()));
         let OUTPOINT_TO_SAT_RANGES_table = wtx.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
         let sat_to_point = wtx.open_table(SAT_TO_SATPOINT).unwrap();
         let statis_to_count = wtx.open_table(STATISTIC_TO_COUNT).unwrap();
@@ -80,17 +80,17 @@ impl SimulatorServer {
             current_height: h,
             current_block_time: ts as u32,
             internal_index: self.internal_index.clone(),
-            ORD_TX_TO_OPERATIONS: Rc::new(RefCell::new((wtx.open_table(crate::index::ORD_TX_TO_OPERATIONS)?))),
+            ORD_TX_TO_OPERATIONS: Rc::new(RefCell::new(wtx.open_table(crate::index::ORD_TX_TO_OPERATIONS)?)),
             COLLECTIONS_KEY_TO_INSCRIPTION_ID: Rc::new(RefCell::new(wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?)),
-            COLLECTIONS_INSCRIPTION_ID_TO_KINDS: Rc::new(RefCell::new((wtx
-                .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?))),
+            COLLECTIONS_INSCRIPTION_ID_TO_KINDS: Rc::new(RefCell::new(wtx
+                .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?)),
             SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: sequence_number_to_inscription_entry.clone(),
             OUTPOINT_TO_ENTRY: outpoint_to_entry.clone(),
-            BRC20_BALANCES: Rc::new(RefCell::new((wtx.open_table(BRC20_BALANCES)?))),
-            BRC20_TOKEN: Rc::new(RefCell::new((wtx.open_table(BRC20_TOKEN)?))),
-            BRC20_EVENTS: Rc::new(RefCell::new((wtx.open_table(BRC20_EVENTS)?))),
-            BRC20_TRANSFERABLELOG: Rc::new(RefCell::new((wtx.open_table(BRC20_TRANSFERABLELOG)?))),
-            BRC20_INSCRIBE_TRANSFER: Rc::new(RefCell::new((wtx.open_table(BRC20_INSCRIBE_TRANSFER)?))),
+            BRC20_BALANCES: Rc::new(RefCell::new(wtx.open_table(BRC20_BALANCES)?)),
+            BRC20_TOKEN: Rc::new(RefCell::new(wtx.open_table(BRC20_TOKEN)?)),
+            BRC20_EVENTS: Rc::new(RefCell::new(wtx.open_table(BRC20_EVENTS)?)),
+            BRC20_TRANSFERABLELOG: Rc::new(RefCell::new(wtx.open_table(BRC20_TRANSFERABLELOG)?)),
+            BRC20_INSCRIBE_TRANSFER: Rc::new(RefCell::new(wtx.open_table(BRC20_INSCRIBE_TRANSFER)?)),
             _marker_a: Default::default(),
         };
 
@@ -108,8 +108,8 @@ impl SimulatorServer {
             sequence_number_to_satpoint: Rc::new(RefCell::new(sequence_number_to_satpoint)),
             sequence_number_to_inscription_entry: sequence_number_to_inscription_entry,
             OUTPOINT_TO_SAT_RANGES: Rc::new(RefCell::new(OUTPOINT_TO_SAT_RANGES_table)),
-            sat_to_satpoint: Rc::new(RefCell::new((sat_to_point))),
-            statistic_to_count: Rc::new(RefCell::new((statis_to_count))),
+            sat_to_satpoint: Rc::new(RefCell::new(sat_to_point)),
+            statistic_to_count: Rc::new(RefCell::new(statis_to_count)),
             _marker_a: Default::default(),
             client: Some(self.client.clone()),
             context: ctx,

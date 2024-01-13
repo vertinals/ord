@@ -53,7 +53,6 @@ pub(crate) mod updater;
 #[cfg(test)]
 pub(crate) mod testing;
 pub mod simulator;
-mod database_processor;
 
 const SCHEMA_VERSION: u64 = 16;
 
