@@ -15,20 +15,19 @@ use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
 use log::{error, info};
 use redb::{ReadableTable, WriteTransaction};
-use crate::{Index, Options, Rune, RuneEntry, Sat, SatPoint, timestamp};
+use crate::{Index, Options, Sat, SatPoint};
 use crate::height::Height;
-use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HEIGHT_TO_BLOCK_HEADER, HEIGHT_TO_LAST_SEQUENCE_NUMBER, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, OUTPOINT_TO_ENTRY, OUTPOINT_TO_RUNE_BALANCES, OUTPOINT_TO_SAT_RANGES, RUNE_ID_TO_RUNE_ENTRY, RUNE_TO_RUNE_ID, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_RUNE_ID, SEQUENCE_NUMBER_TO_SATPOINT, Statistic, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_RUNE, TRANSACTION_ID_TO_TRANSACTION};
-use crate::index::entry::{Entry, SatPointValue, SatRange};
+use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, OUTPOINT_TO_ENTRY, OUTPOINT_TO_SAT_RANGES, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_SATPOINT, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION};
+use crate::index::entry::Entry;
 use crate::index::simulator::error::SimulateError;
 use crate::index::simulator::processor::{IndexWrapper, StorageProcessor};
 use crate::index::updater::pending_updater::PendingUpdater;
 use crate::okx::datastore::ord::InscriptionOp;
 use crate::okx::lru::SimpleLru;
-use crate::okx::protocol::{BlockContext, ProtocolConfig, ProtocolManager};
+use crate::okx::protocol::{ProtocolConfig, ProtocolManager};
 use crate::okx::protocol::simulate::SimulateContext;
 
 pub struct Simulator<'a, 'db, 'tx> {
-    // pub simulate_index: IndexTracer,
     pub internal_index: IndexWrapper,
     pub client: Option<DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>>,
     _marker_a: PhantomData<&'a ()>,
@@ -44,7 +43,7 @@ pub struct SimulatorServer {
 }
 
 impl SimulatorServer {
-    pub fn execute_tx(&self, tx: &Transaction, commit: bool) -> crate::Result<(),SimulateError> {
+    pub fn execute_tx(&self, tx: &Transaction, commit: bool) -> crate::Result<(), SimulateError> {
         let mut wtx = self.simulate_index.begin_write()?;
         self.simulate_tx(tx, &wtx)?;
         if commit {
@@ -54,7 +53,7 @@ impl SimulatorServer {
         Ok(())
     }
 
-    fn simulate_tx(&self, tx: &Transaction, wtx: &WriteTransaction) -> crate::Result<(),SimulateError> {
+    fn simulate_tx(&self, tx: &Transaction, wtx: &WriteTransaction) -> crate::Result<(), SimulateError> {
         let height = self.internal_index.internal.block_count()?;
         let block = self.internal_index.internal.get_block_by_height(height)?.unwrap();
         let home_inscriptions = wtx.open_table(HOME_INSCRIPTIONS).unwrap();
@@ -119,7 +118,7 @@ impl SimulatorServer {
         self.loop_simulate_tx(&processor, &tx)?;
         Ok(())
     }
-    pub fn loop_simulate_tx(&self, processor: &StorageProcessor, tx: &Transaction) -> crate::Result<(),SimulateError> {
+    pub fn loop_simulate_tx(&self, processor: &StorageProcessor, tx: &Transaction) -> crate::Result<(), SimulateError> {
         let tx_id = tx.txid();
         let mut need_handle_first = vec![];
         for input in &tx.input {
@@ -139,7 +138,7 @@ impl SimulatorServer {
             let parent_tx = processor.get_transaction(&parent)?;
             if parent_tx.is_none() {
                 error!("parent tx not exist,tx_hash:{:?},child_hash:{:?}",&parent,&tx_id);
-                return Err(SimulateError::TxNotFound(parent.clone()))
+                return Err(SimulateError::TxNotFound(parent.clone()));
             }
             let parent_tx = parent_tx.unwrap();
             info!("parent tx :{:?},exist,but not in utxo data,child_hash:{:?},need to simulate parent tx",&parent,&tx_id);
@@ -151,7 +150,7 @@ impl SimulatorServer {
         Ok(())
     }
 
-    pub fn do_simulate_tx(&self, processor: &StorageProcessor, tx: &Transaction) -> crate::Result<(),SimulateError> {
+    pub fn do_simulate_tx(&self, processor: &StorageProcessor, tx: &Transaction) -> crate::Result<(), SimulateError> {
         let mut sim = Simulator {
             internal_index: self.internal_index.clone(),
             client: None,
@@ -254,7 +253,6 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
         let unbound_inscriptions = processor.get_unbound_inscriptions()?;
         let next_sequence_number = processor.next_sequence_number()?;
 
-        // let processor = &mut self.processor;
         let mut inscription_updater = PendingUpdater::new(
             operations,
             blessed_inscription_count,
