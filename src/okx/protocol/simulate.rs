@@ -797,6 +797,7 @@ use crate::okx::datastore::ord::collections::CollectionKind;
 use crate::okx::datastore::ord::redb::table::{get_collection_inscription_id, get_collections_of_inscription, get_inscription_number_by_sequence_number, get_transaction_operations, get_txout_by_outpoint, save_transaction_operations, set_inscription_attributes, set_inscription_by_collection_key};
 use crate::okx::datastore::ScriptKey;
 use crate::okx::protocol::ContextTrait;
+use crate::okx::protocol::trace::TraceNode;
 
 #[derive(Clone)]
 pub struct SimulateContext<'a, 'db, 'txn> {
@@ -819,6 +820,7 @@ pub struct SimulateContext<'a, 'db, 'txn> {
     pub(crate) BRC20_EVENTS: Rc<RefCell<Table<'db, 'txn, &'static TxidValue, &'static [u8]>>>,
     pub(crate) BRC20_TRANSFERABLELOG: Rc<RefCell<Table<'db, 'txn, &'static str, &'static [u8]>>>,
     pub(crate) BRC20_INSCRIBE_TRANSFER: Rc<RefCell<Table<'db, 'txn, InscriptionIdValue, &'static [u8]>>>,
+    pub traces: Rc<RefCell<Vec<TraceNode>>>,
     pub _marker_a: PhantomData<&'a ()>,
 }
 
@@ -990,7 +992,7 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for SimulateContext<'a, 'db, 'txn> {
 
     fn insert_token_info(&mut self, tick: &Tick, new_info: &TokenInfo) -> crate::Result<(), Self::Error> {
         let mut binding = self.BRC20_TOKEN.borrow_mut();
-        let mut table = binding.deref_mut();
+        let table = binding.deref_mut();
         insert_token_info(table, tick, new_info)
     }
 
