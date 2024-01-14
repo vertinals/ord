@@ -6,16 +6,24 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread;
 use anyhow::anyhow;
 use bitcoin::{OutPoint, Transaction, Txid, TxOut};
 use indexer_sdk::client::drect::DirectClient;
+use indexer_sdk::client::event::ClientEvent;
 use indexer_sdk::client::SyncClient;
+use indexer_sdk::configuration::base::{IndexerConfiguration, NetConfiguration, ZMQConfiguration};
+use indexer_sdk::factory::common::async_create_and_start_processor;
 use indexer_sdk::storage::db::memory::MemoryDB;
 use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
+use indexer_sdk::wait_exit_signal;
 use log::{error, info};
 use redb::{WriteTransaction};
 use tempfile::NamedTempFile;
+use tokio::runtime::Runtime;
+use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use crate::{Index, Options, Sat, SatPoint};
 use crate::height::Height;
 use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, OUTPOINT_TO_ENTRY, OUTPOINT_TO_SAT_RANGES, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_SATPOINT, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION};
@@ -38,6 +46,7 @@ pub struct Simulator<'a, 'db, 'tx> {
     _marker_tx: PhantomData<&'tx ()>,
 }
 
+#[derive(Clone)]
 pub struct SimulatorServer {
     tx_out_cache: Rc<RefCell<SimpleLru<OutPoint, TxOut>>>,
     pub internal_index: IndexWrapper,
@@ -45,7 +54,57 @@ pub struct SimulatorServer {
     pub client: DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>,
 }
 
+unsafe impl Send for SimulatorServer {}
+
+unsafe impl Sync for SimulatorServer {}
+
 impl SimulatorServer {
+    pub async fn start(&self, exit: watch::Receiver<()>) -> JoinHandle<()> {
+        let internal = self.clone();
+        tokio::spawn(async move {
+            internal.on_start(exit).await;
+        })
+    }
+    async fn on_start(self, mut exit: watch::Receiver<()>) {
+        let client = self.client.clone();
+        loop {
+            tokio::select! {
+                     event=self.get_client_event()=>{
+                         match event{
+                            Ok(event) => {
+                                if let Err(e)= self.handle_event(&event).await{
+                                        log::error!("handle event error: {:?}", e);
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("receive event error: {:?}", e);
+                                break;
+                            }
+                        }
+                     },
+                     _ = exit.changed() => {
+                    info!("simulator receive exit signal, exit.");
+                    break;
+                 }
+                    }
+        }
+    }
+    async fn handle_event(&self, event: &ClientEvent) -> crate::Result<()> {
+        info!("sim receive event:{:?}", event);
+        match event {
+            ClientEvent::Transaction(tx) => {
+                self.execute_tx(tx, true)?;
+            }
+            ClientEvent::GetHeight => {}
+            ClientEvent::TxDroped(_) => {}
+            ClientEvent::TxConfirmed(_) => {}
+        }
+        Ok(())
+    }
+    async fn get_client_event(&self) -> crate::Result<ClientEvent, SimulateError> {
+        let ret = self.client.block_get_event()?;
+        Ok(ret)
+    }
     pub fn execute_tx(&self, tx: &Transaction, commit: bool) -> crate::Result<Vec<Receipt>, SimulateError> {
         let mut wtx = self.simulate_index.begin_write()?;
         let traces = Rc::new(RefCell::new(vec![]));
@@ -189,11 +248,11 @@ impl SimulatorServer {
         Ok(())
     }
 
-    pub fn new(internal_index: Arc<Index>, simualte_ops: Option<Options>, client: DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> crate::Result<Self> {
-        let simulate_index = if let Some(ops) = simualte_ops {
+    pub fn new(ops: Options, internal_index: Arc<Index>, simulate_ops: Option<Options>, client: DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> crate::Result<Self> {
+        let simulate_index = if let Some(ops) = simulate_ops {
             Index::open(&ops)?
         } else {
-            let mut origin_ops = internal_index.options.clone();
+            let mut origin_ops = ops.clone();
             let dbfile = NamedTempFile::new().unwrap();
             origin_ops.index = Some(dbfile.path().to_path_buf());
             Index::open(&origin_ops)?
@@ -431,13 +490,68 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
     }
 }
 
+pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorServer> {
+    if !ops.simulate_enable {
+        return None;
+    }
+    let rt = Runtime::new().unwrap();
+    let zmq_url = ops.simulate_zmq_url.clone().unwrap();
+    let sim_rpc = ops.simulate_bitcoin_rpc_url.clone().unwrap();
+    let sim_user = ops.simulate_bitcoin_rpc_user.clone().unwrap();
+    let sim_pass = ops.simulate_bitcoin_rpc_pass.clone().unwrap();
+
+    let config = IndexerConfiguration {
+        mq: ZMQConfiguration { zmq_url: zmq_url, zmq_topic: vec!["sequence".to_string(), "rawblock".to_string()] },
+        net: NetConfiguration {
+            url: sim_rpc,
+            username: sim_user,
+            password: sim_pass,
+        },
+        ..Default::default()
+    };
+    let (tx, rx) = watch::channel(());
+    let (server, handlers) = rt.block_on(async {
+        let ret = async_create_and_start_processor(rx.clone(), config).await;
+        let mut handlers = ret.1;
+        let mut sim_ops = ops.clone();
+        sim_ops.index = ops.simulate_index.clone();
+        let server = SimulatorServer::new(ops.clone(), internal.clone(), Some(sim_ops), ret.0).unwrap();
+        handlers.push(server.start(rx.clone()).await);
+        (server.clone(), handlers)
+    });
+
+    thread::spawn(move || {
+        rt.block_on(async {
+            wait_exit_signal().await.unwrap();
+            tx.send(()).unwrap();
+            for h in handlers {
+                h.await.unwrap();
+            }
+        });
+    });
+    Some(server)
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::thread::sleep;
     use bitcoincore_rpc::RpcApi;
     use indexer_sdk::factory::common::new_client_for_test;
     use log::LevelFilter;
     use super::*;
+
+    #[test]
+    pub fn test_start() {
+        env_logger::builder()
+            .filter_level(LevelFilter::Debug)
+            .format_target(false)
+            .init();
+        let opt = create_options();
+        let internal = Arc::new(Index::open(&opt).unwrap());
+        let server = start_simulator(opt, internal.clone());
+        sleep(std::time::Duration::from_secs(5))
+    }
 
     #[test]
     pub fn test_simulate_tx() {
@@ -448,12 +562,12 @@ mod tests {
         let opt = create_options();
         let internal = Arc::new(Index::open(&opt).unwrap());
         let mut opt2 = opt.clone();
-        opt2.index = Some(PathBuf::from("./simulate"));
+        opt2.index=opt.simulate_index.clone();
         let client = new_client_for_test("http://localhost:18443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
-        let simulate_server = SimulatorServer::new(internal.clone(), Some(opt2), client.clone()).unwrap();
+        let simulate_server = SimulatorServer::new(internal.options.clone(), internal.clone(), Some(opt2), client.clone()).unwrap();
 
         let client = client.clone().get_btc_client();
-        let tx = client.get_raw_transaction(&Txid::from_str("f2ecd8708afbb0056709333a60882536c7d070633e1ee7cf80d83ad35e1f8403").unwrap(), None).unwrap();
+        let tx = client.get_raw_transaction(&Txid::from_str("f9028dbd87d723399181d9bdb80a36e991b56405dfae2ccb6ee033d249b5f724").unwrap(), None).unwrap();
         println!("{:?}", tx);
         simulate_server.execute_tx(&tx, true).unwrap();
     }
@@ -487,6 +601,12 @@ mod tests {
             enable_index_bitmap: true,
             enable_index_brc20: true,
             first_brc20_height: Some(0),
+            simulate_enable: true,
+            simulate_zmq_url: Some("tcp://0.0.0.0:28332".to_string()),
+            simulate_bitcoin_rpc_url: Some("http://localhost:18443".to_string()),
+            simulate_bitcoin_rpc_pass: Some("bitcoinrpc".to_string()),
+            simulate_bitcoin_rpc_user: Some("bitcoinrpc".to_string()),
+            simulate_index: Some("./simulate".to_string().into()),
         };
         opt
     }

@@ -1,4 +1,5 @@
 use bitcoin::Txid;
+use indexer_sdk::error::IndexerError;
 use redb::{CommitError, TableError};
 
 #[derive(Debug, thiserror::Error)]
@@ -13,5 +14,9 @@ pub enum SimulateError {
     CommitError(#[from]CommitError),
 
     #[error("table failed: {0}")]
-    TableError(#[from]TableError)
+    TableError(#[from]TableError),
+
+
+    #[error("indexer failed: {0}")]
+    IndexerError(#[from]IndexerError)
 }
