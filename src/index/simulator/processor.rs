@@ -75,15 +75,12 @@ unsafe impl<'a, 'db, 'tx> Sync for StorageProcessor<'a, 'db, 'tx> {}
 
 
 impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
-    pub fn create_context(&self) -> crate::Result<Context> {
-        todo!()
-    }
     pub fn get_transaction(&self, tx_id: &Txid) -> crate::Result<Option<Transaction>> {
         let client = self.client.as_ref().unwrap();
         let ret = client.get_transaction_by_tx_id(tx_id.clone())?;
         Ok(ret)
     }
-    pub fn create_simulate_context(&self) -> crate::Result<SimulateContext<'a, 'db, 'tx>> {
+    pub fn create_context(&self) -> crate::Result<SimulateContext<'a, 'db, 'tx>> {
         Ok(self.context.clone())
     }
     pub fn next_sequence_number(&self) -> crate::Result<u32> {

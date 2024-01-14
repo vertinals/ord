@@ -23,6 +23,7 @@ use crate::index::entry::Entry;
 use crate::index::simulator::error::SimulateError;
 use crate::index::simulator::processor::{IndexWrapper, StorageProcessor};
 use crate::index::updater::pending_updater::PendingUpdater;
+use crate::okx::datastore::brc20::{Brc20Reader, Receipt};
 use crate::okx::datastore::ord::InscriptionOp;
 use crate::okx::lru::SimpleLru;
 use crate::okx::protocol::{ProtocolConfig, ProtocolManager};
@@ -45,18 +46,19 @@ pub struct SimulatorServer {
 }
 
 impl SimulatorServer {
-    pub fn execute_tx(&self, tx: &Transaction, commit: bool) -> crate::Result<(), SimulateError> {
+    pub fn execute_tx(&self, tx: &Transaction, commit: bool) -> crate::Result<Vec<Receipt>, SimulateError> {
         let mut wtx = self.simulate_index.begin_write()?;
         let traces = Rc::new(RefCell::new(vec![]));
-        self.simulate_tx(tx, &wtx, traces)?;
+        let ret = self.simulate_tx(tx, &wtx, traces)?;
         if commit {
             wtx.commit()?;
         }
 
-        Ok(())
+        Ok(ret)
     }
 
-    fn simulate_tx(&self, tx: &Transaction, wtx: &WriteTransaction, traces: Rc<RefCell<Vec<TraceNode>>>) -> crate::Result<(), SimulateError> {
+    fn simulate_tx(&self, tx: &Transaction, wtx: &WriteTransaction, traces: Rc<RefCell<Vec<TraceNode>>>) -> crate::Result<Vec<Receipt>, SimulateError> {
+        let brc20_receipts = Rc::new(RefCell::new(vec![]));
         let height = self.internal_index.internal.block_count()?;
         let block = self.internal_index.internal.get_block_by_height(height)?.unwrap();
         let home_inscriptions = wtx.open_table(HOME_INSCRIPTIONS).unwrap();
@@ -95,8 +97,15 @@ impl SimulatorServer {
             BRC20_TRANSFERABLELOG: Rc::new(RefCell::new(wtx.open_table(BRC20_TRANSFERABLELOG)?)),
             BRC20_INSCRIBE_TRANSFER: Rc::new(RefCell::new(wtx.open_table(BRC20_INSCRIBE_TRANSFER)?)),
             traces: traces.clone(),
+            brc20_receipts: brc20_receipts.clone(),
             _marker_a: Default::default(),
         };
+
+        let db_receipts = ctx.get_transaction_receipts(&tx.txid())?;
+        if db_receipts.len() > 0 {
+            info!("tx:{:?} already simulated",tx.txid());
+            return Ok(db_receipts);
+        }
 
         let processor = StorageProcessor {
             internal: self.internal_index.clone(),
@@ -121,7 +130,9 @@ impl SimulatorServer {
         };
 
         self.loop_simulate_tx(&processor, &tx)?;
-        Ok(())
+        let ret = brc20_receipts.borrow();
+        let ret = ret.deref().clone();
+        Ok(ret)
     }
     pub fn loop_simulate_tx(&self, processor: &StorageProcessor, tx: &Transaction) -> crate::Result<(), SimulateError> {
         let tx_id = tx.txid();
@@ -351,7 +362,7 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
         }
         inscription_updater.flush_cache()?;
 
-        let mut context = processor.create_simulate_context()?;
+        let mut context = processor.create_context()?;
         let config = ProtocolConfig::new_with_options(&self.internal_index.internal.options);
         ProtocolManager::new(config).index_block(&mut context, &block, operations.clone())?;
 

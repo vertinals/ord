@@ -821,6 +821,7 @@ pub struct SimulateContext<'a, 'db, 'txn> {
     pub(crate) BRC20_TRANSFERABLELOG: Rc<RefCell<Table<'db, 'txn, &'static str, &'static [u8]>>>,
     pub(crate) BRC20_INSCRIBE_TRANSFER: Rc<RefCell<Table<'db, 'txn, InscriptionIdValue, &'static [u8]>>>,
     pub traces: Rc<RefCell<Vec<TraceNode>>>,
+    pub brc20_receipts:Rc<RefCell<Vec<Receipt>>>,
     pub _marker_a: PhantomData<&'a ()>,
 }
 
@@ -998,7 +999,7 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for SimulateContext<'a, 'db, 'txn> {
 
     fn update_mint_token_info(&mut self, tick: &Tick, minted_amt: u128, minted_block_number: u32) -> crate::Result<(), Self::Error> {
         let mut binding = self.BRC20_TOKEN.borrow_mut();
-        let mut table = binding.deref_mut();
+        let table = binding.deref_mut();
         let mut info = get_token_info(table, tick)?.unwrap_or_else(|| panic!("token {} not exist", tick.as_str()));
         info.minted = minted_amt;
         info.latest_mint_number = minted_block_number;
@@ -1006,6 +1007,8 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for SimulateContext<'a, 'db, 'txn> {
     }
 
     fn save_transaction_receipts(&mut self, txid: &Txid, receipt: &[Receipt]) -> crate::Result<(), Self::Error> {
+        let mut receipts=self.brc20_receipts.borrow_mut();
+        receipts.extend_from_slice(receipt);
         let mut table = self.BRC20_EVENTS.borrow_mut();
         save_transaction_receipts(&mut table, txid, receipt)
     }
