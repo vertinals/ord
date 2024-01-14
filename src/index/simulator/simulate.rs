@@ -19,7 +19,7 @@ use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
 use indexer_sdk::wait_exit_signal;
 use log::{error, info};
-use redb::{WriteTransaction};
+use redb::{Database, WriteTransaction};
 use tempfile::NamedTempFile;
 use tokio::runtime::Runtime;
 use tokio::sync::watch;
@@ -50,7 +50,7 @@ pub struct Simulator<'a, 'db, 'tx> {
 pub struct SimulatorServer {
     tx_out_cache: Rc<RefCell<SimpleLru<OutPoint, TxOut>>>,
     pub internal_index: IndexWrapper,
-    pub simulate_index: Arc<Index>,
+    pub simulate_index: Arc<Database>,
     pub client: DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>,
 }
 
@@ -247,15 +247,8 @@ impl SimulatorServer {
         Ok(())
     }
 
-    pub fn new(ops: Options, internal_index: Arc<Index>, simulate_ops: Option<Options>,client:DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> crate::Result<Self> {
-        let simulate_index = if let Some(ops) = simulate_ops {
-            Index::open(&ops)?
-        } else {
-            let mut origin_ops = ops.clone();
-            let dbfile = NamedTempFile::new().unwrap();
-            origin_ops.index = Some(dbfile.path().to_path_buf());
-            Index::open(&origin_ops)?
-        };
+    pub fn new<P:Into<PathBuf>>(path:P, internal_index: Arc<Index>, client:DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> crate::Result<Self> {
+        let simulate_index =Database::create(path.into())?;
         let simulate_index = Arc::new(simulate_index);
         Ok(Self { tx_out_cache: Rc::new(RefCell::new(SimpleLru::new(500))), internal_index: IndexWrapper::new(internal_index), simulate_index, client })
     }
@@ -513,9 +506,8 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
     let (server, handlers) = rt.block_on(async {
         let ret = async_create_and_start_processor(rx.clone(), config).await;
         let mut handlers = ret.1;
-        let mut sim_ops = ops.clone();
-        sim_ops.index = ops.simulate_index.clone();
-        let server = SimulatorServer::new(ops.clone(), internal.clone(), Some(sim_ops),ret.0).unwrap();
+        let server = SimulatorServer::new(ops.simulate_index
+                                              .clone().unwrap_or("./simulate".into()),internal.clone(),ret.0).unwrap();
         handlers.push(server.clone().start(rx.clone()).await);
         (server,handlers)
     });
@@ -549,10 +541,8 @@ mod tests {
             .init();
         let opt = create_options();
         let internal = Arc::new(Index::open(&opt).unwrap());
-        let mut sim_ops = opt.clone();
-        sim_ops.index = opt.simulate_index.clone();
         let client = new_client_for_test("http://localhost:18443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
-        let server = SimulatorServer::new(opt.clone(), internal.clone(), Some(sim_ops), client).unwrap();
+        let simulate_server = SimulatorServer::new("./simulate", internal.clone(),  client.clone()).unwrap();
         let server = start_simulator(opt, internal.clone());
         sleep(std::time::Duration::from_secs(5))
     }
@@ -565,10 +555,8 @@ mod tests {
             .init();
         let opt = create_options();
         let internal = Arc::new(Index::open(&opt).unwrap());
-        let mut opt2 = opt.clone();
-        opt2.index = opt.simulate_index.clone();
         let client = new_client_for_test("http://localhost:18443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
-        let simulate_server = SimulatorServer::new(internal.options.clone(), internal.clone(), Some(opt2), client.clone()).unwrap();
+        let simulate_server = SimulatorServer::new("./simulate", internal.clone(),  client.clone()).unwrap();
 
         let client = client.clone().get_btc_client();
         let tx = client.get_raw_transaction(&Txid::from_str("f9028dbd87d723399181d9bdb80a36e991b56405dfae2ccb6ee033d249b5f724").unwrap(), None).unwrap();

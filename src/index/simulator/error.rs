@@ -18,5 +18,9 @@ pub enum SimulateError {
 
 
     #[error("indexer failed: {0}")]
-    IndexerError(#[from]IndexerError)
+    IndexerError(#[from]IndexerError),
+
+
+    #[error("transaction failed: {0}")]
+    TransactionError(#[from] redb::TransactionError),
 }
