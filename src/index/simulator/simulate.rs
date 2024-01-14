@@ -66,7 +66,6 @@ impl SimulatorServer {
         })
     }
     async fn on_start(self, mut exit: watch::Receiver<()>) {
-        let client = self.client.clone();
         loop {
             tokio::select! {
                      event=self.get_client_event()=>{
@@ -248,7 +247,7 @@ impl SimulatorServer {
         Ok(())
     }
 
-    pub fn new(ops: Options, internal_index: Arc<Index>, simulate_ops: Option<Options>, client: DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> crate::Result<Self> {
+    pub fn new(ops: Options, internal_index: Arc<Index>, simulate_ops: Option<Options>,client:DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> crate::Result<Self> {
         let simulate_index = if let Some(ops) = simulate_ops {
             Index::open(&ops)?
         } else {
@@ -494,6 +493,7 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
     if !ops.simulate_enable {
         return None;
     }
+
     let rt = Runtime::new().unwrap();
     let zmq_url = ops.simulate_zmq_url.clone().unwrap();
     let sim_rpc = ops.simulate_bitcoin_rpc_url.clone().unwrap();
@@ -515,9 +515,9 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
         let mut handlers = ret.1;
         let mut sim_ops = ops.clone();
         sim_ops.index = ops.simulate_index.clone();
-        let server = SimulatorServer::new(ops.clone(), internal.clone(), Some(sim_ops), ret.0).unwrap();
-        handlers.push(server.start(rx.clone()).await);
-        (server.clone(), handlers)
+        let server = SimulatorServer::new(ops.clone(), internal.clone(), Some(sim_ops),ret.0).unwrap();
+        handlers.push(server.clone().start(rx.clone()).await);
+        (server,handlers)
     });
 
     thread::spawn(move || {
@@ -549,6 +549,10 @@ mod tests {
             .init();
         let opt = create_options();
         let internal = Arc::new(Index::open(&opt).unwrap());
+        let mut sim_ops = opt.clone();
+        sim_ops.index = opt.simulate_index.clone();
+        let client = new_client_for_test("http://localhost:18443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
+        let server = SimulatorServer::new(opt.clone(), internal.clone(), Some(sim_ops), client).unwrap();
         let server = start_simulator(opt, internal.clone());
         sleep(std::time::Duration::from_secs(5))
     }
@@ -562,7 +566,7 @@ mod tests {
         let opt = create_options();
         let internal = Arc::new(Index::open(&opt).unwrap());
         let mut opt2 = opt.clone();
-        opt2.index=opt.simulate_index.clone();
+        opt2.index = opt.simulate_index.clone();
         let client = new_client_for_test("http://localhost:18443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
         let simulate_server = SimulatorServer::new(internal.options.clone(), internal.clone(), Some(opt2), client.clone()).unwrap();
 
