@@ -15,6 +15,7 @@ use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
 use log::{error, info};
 use redb::{WriteTransaction};
+use tempfile::NamedTempFile;
 use crate::{Index, Options, Sat, SatPoint};
 use crate::height::Height;
 use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, OUTPOINT_TO_ENTRY, OUTPOINT_TO_SAT_RANGES, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_SATPOINT, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION};
@@ -177,8 +178,17 @@ impl SimulatorServer {
         Ok(())
     }
 
-    pub fn new(internal_index: Arc<Index>, simulate_index: Arc<Index>, client: DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> Self {
-        Self { tx_out_cache: Rc::new(RefCell::new(SimpleLru::new(500))), internal_index: IndexWrapper::new(internal_index), simulate_index, client }
+    pub fn new(internal_index: Arc<Index>, simualte_ops: Option<Options>, client: DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> crate::Result<Self> {
+        let simulate_index = if let Some(ops) = simualte_ops {
+            Index::open(&ops)?
+        } else {
+            let mut origin_ops = internal_index.options.clone();
+            let dbfile = NamedTempFile::new().unwrap();
+            origin_ops.index = Some(dbfile.path().to_path_buf());
+            Index::open(&origin_ops)?
+        };
+        let simulate_index = Arc::new(simulate_index);
+        Ok(Self { tx_out_cache: Rc::new(RefCell::new(SimpleLru::new(500))), internal_index: IndexWrapper::new(internal_index), simulate_index, client })
     }
 }
 
@@ -428,9 +438,8 @@ mod tests {
         let internal = Arc::new(Index::open(&opt).unwrap());
         let mut opt2 = opt.clone();
         opt2.index = Some(PathBuf::from("./simulate"));
-        let simulate_index = Arc::new(Index::open(&opt2).unwrap());
         let client = new_client_for_test("http://localhost:18443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
-        let simulate_server = SimulatorServer::new(internal.clone(), simulate_index.clone(), client.clone());
+        let simulate_server = SimulatorServer::new(internal.clone(), Some(opt2), client.clone()).unwrap();
 
         let client = client.clone().get_btc_client();
         let tx = client.get_raw_transaction(&Txid::from_str("f2ecd8708afbb0056709333a60882536c7d070633e1ee7cf80d83ad35e1f8403").unwrap(), None).unwrap();
