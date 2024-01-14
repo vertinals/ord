@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -247,8 +247,8 @@ impl SimulatorServer {
         Ok(())
     }
 
-    pub fn new<P:Into<PathBuf>>(path:P, internal_index: Arc<Index>, client:DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> crate::Result<Self> {
-        let simulate_index =Database::create(path.into())?;
+    pub fn new(path:impl AsRef<Path>, internal_index: Arc<Index>, client:DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> crate::Result<Self> {
+        let simulate_index =Database::create(path)?;
         let simulate_index = Arc::new(simulate_index);
         Ok(Self { tx_out_cache: Rc::new(RefCell::new(SimpleLru::new(500))), internal_index: IndexWrapper::new(internal_index), simulate_index, client })
     }
@@ -506,8 +506,7 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
     let (server, handlers) = rt.block_on(async {
         let ret = async_create_and_start_processor(rx.clone(), config).await;
         let mut handlers = ret.1;
-        let server = SimulatorServer::new(ops.simulate_index
-                                              .clone().unwrap_or("./simulate".into()),internal.clone(),ret.0).unwrap();
+        let server = SimulatorServer::new(ops.simulate_index.unwrap(),internal.clone(),ret.0).unwrap();
         handlers.push(server.clone().start(rx.clone()).await);
         (server,handlers)
     });
@@ -541,8 +540,6 @@ mod tests {
             .init();
         let opt = create_options();
         let internal = Arc::new(Index::open(&opt).unwrap());
-        let client = new_client_for_test("http://localhost:18443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
-        let simulate_server = SimulatorServer::new("./simulate", internal.clone(),  client.clone()).unwrap();
         let server = start_simulator(opt, internal.clone());
         sleep(std::time::Duration::from_secs(5))
     }

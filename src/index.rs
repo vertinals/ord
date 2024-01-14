@@ -255,11 +255,8 @@ impl Index {
 
     log::info!("Setting DB cache size to {} bytes", db_cache_size);
 
-    let durability = if cfg!(test) {
-      redb::Durability::None
-    } else {
-      redb::Durability::Immediate
-    };
+    // TODO: why none?
+    let durability = redb::Durability::Immediate;
 
     let index_runes;
     let index_sats;
