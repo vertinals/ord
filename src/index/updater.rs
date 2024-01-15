@@ -709,6 +709,11 @@ impl<'index> Updater<'_> {
       tx_out_cache,
       hit: 0,
       miss: 0,
+      save_cost: 0,
+      resolve_cost: 0,
+      execute_cost: 0,
+      inscriptions_size: 0,
+      messages_size: 0,
       ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS)?,
       COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?,
       COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
