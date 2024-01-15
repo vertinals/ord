@@ -37,6 +37,7 @@ use {
     sync::{Mutex, Once},
   },
 };
+use crate::okx::protocol::trace::TraceNode;
 
 pub use self::entry::RuneEntry;
 pub(super) use self::entry::{
@@ -101,6 +102,9 @@ define_table! { BRC20_TOKEN, &str, &[u8] }
 define_table! { BRC20_EVENTS, &TxidValue, &[u8] }
 define_table! { BRC20_TRANSFERABLELOG, &str, &[u8] }
 define_table! { BRC20_INSCRIBE_TRANSFER, InscriptionIdValue, &[u8] }
+
+// simulate
+define_table! { SIMULATE_TRACE_TABLE, &TxidValue, &[u8] }
 
 #[derive(Debug, PartialEq)]
 pub enum List {

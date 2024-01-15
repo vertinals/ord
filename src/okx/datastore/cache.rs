@@ -3,9 +3,10 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::Arc;
+use serde::{Deserialize, Serialize};
 use crate::Index;
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash,Serialize,Deserialize)]
 pub enum CacheTableIndex {
     TXID_TO_INSCRIPTION_RECEIPTS,
 

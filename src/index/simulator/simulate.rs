@@ -26,7 +26,7 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use crate::{Index, Options, Sat, SatPoint};
 use crate::height::Height;
-use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, OUTPOINT_TO_ENTRY, OUTPOINT_TO_SAT_RANGES, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_SATPOINT, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION};
+use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, OUTPOINT_TO_ENTRY, OUTPOINT_TO_SAT_RANGES, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_SATPOINT, SIMULATE_TRACE_TABLE, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION};
 use crate::index::entry::Entry;
 use crate::index::simulator::error::SimulateError;
 use crate::index::simulator::processor::{IndexWrapper, StorageProcessor};
@@ -138,6 +138,7 @@ impl SimulatorServer {
         let OUTPOINT_TO_SAT_RANGES_table = wtx.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
         let sat_to_point = wtx.open_table(SAT_TO_SATPOINT).unwrap();
         let statis_to_count = wtx.open_table(STATISTIC_TO_COUNT).unwrap();
+        let traces_table = wtx.open_table(SIMULATE_TRACE_TABLE)?;
 
         let h = height;
         let ts = block.header.time;
@@ -184,6 +185,7 @@ impl SimulatorServer {
             outpoint_to_sat_ranges: Rc::new(RefCell::new(OUTPOINT_TO_SAT_RANGES_table)),
             sat_to_satpoint: Rc::new(RefCell::new(sat_to_point)),
             statistic_to_count: Rc::new(RefCell::new(statis_to_count)),
+            trace_table: Rc::new(RefCell::new(traces_table)),
             _marker_a: Default::default(),
             client: Some(self.client.clone()),
             traces: traces.clone(),
@@ -246,6 +248,7 @@ impl SimulatorServer {
             txdata: vec![(tx.clone(), tx.txid())],
         };
         sim.index_block(block.clone(), height, cache, &processor, &mut operations)?;
+        processor.save_traces(&tx.txid())?;
 
         Ok(())
     }

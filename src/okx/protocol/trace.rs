@@ -25,7 +25,7 @@ pub struct MintTokenInfoDelta {
     pub new_latest_mint_number: u32,
 }
 
-#[derive(Clone)]
+#[derive(Clone,Serialize,Deserialize)]
 pub struct TraceNode {
     pub trace_type: CacheTableIndex,
     // pub operation: TraceOperation,

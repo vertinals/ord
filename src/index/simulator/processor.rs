@@ -13,7 +13,7 @@ use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
 use redb::{MultimapTable, ReadableTable, ReadOnlyTable, RedbKey, RedbValue, Table, TableDefinition};
 use crate::{Index, InscriptionId, SatPoint};
-use crate::index::entry::{SatPointValue};
+use crate::index::entry::{Entry, SatPointValue};
 use crate::index::{HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, Statistic, STATISTIC_TO_COUNT, TxidValue};
 use crate::okx::datastore::ord::redb::table::get_txout_by_outpoint;
 use crate::okx::protocol::context::Context;
@@ -56,11 +56,10 @@ pub struct StorageProcessor<'a, 'db, 'tx> {
     pub(super) sequence_number_to_children: Rc<RefCell<MultimapTable<'db, 'tx, u32, u32>>>,
     pub(super) sequence_number_to_satpoint: Rc<RefCell<Table<'db, 'tx, u32, &'static SatPointValue>>>,
     pub(super) sequence_number_to_inscription_entry: Rc<RefCell<Table<'db, 'tx, u32, InscriptionEntryValue>>>,
-
     pub outpoint_to_sat_ranges: Rc<RefCell<Table<'db, 'tx, &'static OutPointValue, &'static [u8]>>>,
     pub sat_to_satpoint: Rc<RefCell<Table<'db, 'tx, u64, &'static SatPointValue>>>,
-
     pub statistic_to_count: Rc<RefCell<Table<'db, 'tx, u64, u64>>>,
+    pub trace_table: Rc<RefCell<Table<'db, 'tx, &'static TxidValue, &'static [u8]>>>,
     pub _marker_a: PhantomData<&'a ()>,
 
     pub client: Option<DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>>,
@@ -339,6 +338,20 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
     pub fn sat_to_satpoint_insert(&self, key: &u64, value: &SatPointValue) -> crate::Result<()> {
         let mut table = self.sat_to_satpoint.borrow_mut();
         table.insert(key, value)?;
+        Ok(())
+    }
+
+    pub fn save_traces(&self, tx_id: &Txid) -> crate::Result<()> {
+        let mut traces = self.traces.borrow_mut();
+        let insert_traces = traces.clone();
+        traces.clear();
+        if insert_traces.is_empty() {
+            return Ok(());
+        }
+        let mut table = self.trace_table.borrow_mut();
+        let key = tx_id.store();
+        let value=rmp_serde::to_vec(&insert_traces)?;
+        table.insert(&key, value.as_slice())?;
         Ok(())
     }
 }
