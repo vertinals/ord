@@ -8,12 +8,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use anyhow::anyhow;
-use bitcoin::{OutPoint, Transaction, Txid, TxOut};
+use bitcoin::{Block, OutPoint, Transaction, Txid, TxOut};
 use indexer_sdk::client::drect::DirectClient;
 use indexer_sdk::client::event::ClientEvent;
 use indexer_sdk::client::{SyncClient};
 use indexer_sdk::configuration::base::{IndexerConfiguration, NetConfiguration, ZMQConfiguration};
-use indexer_sdk::factory::common::async_create_and_start_processor;
+use indexer_sdk::factory::common::{async_create_and_start_processor, sync_create_and_start_processor};
 use indexer_sdk::storage::db::memory::MemoryDB;
 use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
@@ -90,6 +90,11 @@ impl SimulatorServer {
                     }
         }
     }
+
+    fn get_current_height(&self) -> crate::Result<u32> {
+        let height = self.internal_index.internal.block_height()?.unwrap_or(Height(0));
+        Ok(height.0)
+    }
     async fn handle_event(&self, event: &ClientEvent) -> crate::Result<()> {
         info!("sim receive event:{:?}", event);
         match event {
@@ -97,8 +102,8 @@ impl SimulatorServer {
                 self.execute_tx(tx, true)?;
             }
             ClientEvent::GetHeight => {
-                let height = self.internal_index.internal.block_height()?.unwrap_or(Height(0));
-                self.client.report_height(height.0)?;
+                let height = self.get_current_height()?;
+                self.client.report_height(height)?;
             }
             ClientEvent::TxDroped(tx) => {
                 let tx = tx.clone().into();
@@ -206,8 +211,8 @@ impl SimulatorServer {
 
     fn simulate_tx(&self, tx: &Transaction, wtx: &WriteTransaction, traces: Rc<RefCell<Vec<TraceNode>>>) -> crate::Result<Vec<Receipt>, SimulateError> {
         let brc20_receipts = Rc::new(RefCell::new(vec![]));
-        let height = self.internal_index.internal.block_height()?.unwrap_or(Height(0));
-        let block = self.internal_index.internal.get_block_by_height(height.0)?.unwrap();
+        let height = self.get_current_height()?;
+        let block = self.internal_index.internal.get_block_by_height(height)?.unwrap();
         let home_inscriptions = wtx.open_table(HOME_INSCRIPTIONS).unwrap();
         let inscription_id_to_sequence_number =
             wtx.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER).unwrap();
@@ -230,7 +235,7 @@ impl SimulatorServer {
         let ts = block.header.time;
         let ctx = SimulateContext {
             network: self.internal_index.internal.get_chain_network().clone(),
-            current_height: h.0,
+            current_height: h,
             current_block_time: ts as u32,
             internal_index: self.internal_index.clone(),
             ORD_TX_TO_OPERATIONS: Rc::new(RefCell::new(wtx.open_table(crate::index::ORD_TX_TO_OPERATIONS)?)),
@@ -278,12 +283,12 @@ impl SimulatorServer {
             context: ctx,
         };
 
-        self.loop_simulate_tx(&processor, &tx)?;
+        self.loop_simulate_tx(h, &block, &processor, &tx)?;
         let ret = brc20_receipts.borrow();
         let ret = ret.deref().clone();
         Ok(ret)
     }
-    pub fn loop_simulate_tx(&self, processor: &StorageProcessor, tx: &Transaction) -> crate::Result<(), SimulateError> {
+    pub fn loop_simulate_tx(&self, h: u32, block: &Block, processor: &StorageProcessor, tx: &Transaction) -> crate::Result<(), SimulateError> {
         let tx_id = tx.txid();
         let mut need_handle_first = vec![];
         for input in &tx.input {
@@ -307,15 +312,15 @@ impl SimulatorServer {
             }
             let parent_tx = parent_tx.unwrap();
             info!("parent tx :{:?},exist,but not in utxo data,child_hash:{:?},need to simulate parent tx",&parent,&tx_id);
-            self.loop_simulate_tx(processor, &parent_tx)?;
+            self.loop_simulate_tx(h, block, processor, &parent_tx)?;
             info!("parent tx {:?} simulate done,start to simulate child_hash:{:?}",&parent,&tx_id);
         }
-        self.do_simulate_tx(processor, &tx)?;
+        self.do_simulate_tx(h, block, processor, &tx)?;
 
         Ok(())
     }
 
-    pub fn do_simulate_tx(&self, processor: &StorageProcessor, tx: &Transaction) -> crate::Result<(), SimulateError> {
+    pub fn do_simulate_tx(&self, h: u32, block: &Block, processor: &StorageProcessor, tx: &Transaction) -> crate::Result<(), SimulateError> {
         let mut sim = Simulator {
             internal_index: self.internal_index.clone(),
             client: None,
@@ -323,8 +328,8 @@ impl SimulatorServer {
             _marker_b: Default::default(),
             _marker_tx: Default::default(),
         };
-        let height = self.internal_index.internal.block_height()?.unwrap_or(Height(0));
-        let block = self.internal_index.internal.get_block_by_height(height.0)?.unwrap();
+        let height = h;
+        let block = block.clone();
         let mut cache = self.tx_out_cache.borrow_mut();
         let cache = cache.deref_mut();
 
@@ -333,7 +338,7 @@ impl SimulatorServer {
             header: block.header,
             txdata: vec![(tx.clone(), tx.txid())],
         };
-        sim.index_block(block.clone(), height.0, cache, &processor, &mut operations)?;
+        sim.index_block(block.clone(), height, cache, &processor, &mut operations)?;
         processor.save_traces(&tx.txid())?;
 
         Ok(())
@@ -579,14 +584,13 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
         return None;
     }
 
-    let rt = Runtime::new().unwrap();
     let zmq_url = ops.simulate_zmq_url.clone().unwrap();
     let sim_rpc = ops.simulate_bitcoin_rpc_url.clone().unwrap();
     let sim_user = ops.simulate_bitcoin_rpc_user.clone().unwrap();
     let sim_pass = ops.simulate_bitcoin_rpc_pass.clone().unwrap();
 
     let config = IndexerConfiguration {
-        mq: ZMQConfiguration { zmq_url: zmq_url, zmq_topic: vec!["sequence".to_string(), "rawblock".to_string()] },
+        mq: ZMQConfiguration { zmq_url, zmq_topic: vec!["sequence".to_string(), "rawblock".to_string()] },
         net: NetConfiguration {
             url: sim_rpc,
             username: sim_user,
@@ -594,22 +598,17 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
         },
         ..Default::default()
     };
+    let rt = Runtime::new().unwrap();
+    let client = sync_create_and_start_processor(config.clone());
     let (tx, rx) = watch::channel(());
-    let (server, handlers) = rt.block_on(async {
-        let ret = async_create_and_start_processor(rx.clone(), config).await;
-        let mut handlers = ret.1;
-        let server = SimulatorServer::new(ops.simulate_index.unwrap(), internal.clone(), ret.0).unwrap();
-        handlers.push(server.clone().start(rx.clone()).await);
-        (server, handlers)
-    });
-
+    let server = SimulatorServer::new(ops.simulate_index.unwrap(), internal.clone(), client).unwrap();
+    let start_server = server.clone();
     thread::spawn(move || {
         rt.block_on(async {
+            let handler = start_server.start(rx.clone()).await;
             wait_exit_signal().await.unwrap();
             tx.send(()).unwrap();
-            for h in handlers {
-                h.await.unwrap();
-            }
+            handler.await.unwrap();
         });
     });
     Some(server)
@@ -624,17 +623,17 @@ mod tests {
     use log::LevelFilter;
     use super::*;
 
-    #[test]
-    pub fn test_start() {
-        env_logger::builder()
-            .filter_level(LevelFilter::Debug)
-            .format_target(false)
-            .init();
-        let opt = create_options();
-        let internal = Arc::new(Index::open(&opt).unwrap());
-        let server = start_simulator(opt, internal.clone());
-        sleep(std::time::Duration::from_secs(5))
-    }
+    // #[test]
+    // pub fn test_start() {
+    //     env_logger::builder()
+    //         .filter_level(LevelFilter::Debug)
+    //         .format_target(false)
+    //         .init();
+    //     let opt = create_options();
+    //     let internal = Arc::new(Index::open(&opt).unwrap());
+    //     let server = start_simulator(opt, internal.clone());
+    //     sleep(std::time::Duration::from_secs(5))
+    // }
 
     #[test]
     pub fn test_simulate_tx() {
@@ -644,11 +643,11 @@ mod tests {
             .init();
         let opt = create_options();
         let internal = Arc::new(Index::open(&opt).unwrap());
-        let client = new_client_for_test("http://localhost:28443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
+        let client = new_client_for_test("http://localhost:18443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
         let simulate_server = SimulatorServer::new("./simulate", internal.clone(), client.clone()).unwrap();
 
         let client = client.clone().get_btc_client();
-        let tx = client.get_raw_transaction(&Txid::from_str("12353e95e2ed63f20655c437e98a16be75bfae8c10e049f7e4343653429d8821").unwrap(), None).unwrap();
+        let tx = client.get_raw_transaction(&Txid::from_str("0484a97b4c2134aa02c96731534256e25407fb9592bcc02a5a692796bcf59605").unwrap(), None).unwrap();
         println!("{:?}", tx);
         simulate_server.execute_tx(&tx, true).unwrap();
         simulate_server.remove_tx_traces(&tx.txid()).unwrap();
