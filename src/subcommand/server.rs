@@ -1,3 +1,5 @@
+use bitcoincore_rpc::Auth;
+use log::info;
 use {
   self::{
     accept_encoding::AcceptEncoding,
@@ -45,6 +47,8 @@ use {
   },
   utoipa::OpenApi,
 };
+use crate::index::simulator::simulate::{Simulator, SimulatorServer, start_simulator};
+use crate::okx::datastore::brc20::Receipt;
 
 mod accept_encoding;
 mod accept_json;
@@ -197,6 +201,19 @@ impl Server {
         thread::sleep(Duration::from_millis(5000));
       });
       INDEXER.lock().unwrap().replace(index_thread);
+
+      let sim_option = options.clone();
+      let sim_index = index.clone();
+      let simulator_server = thread::spawn(move || {
+        start_simulator(sim_option,sim_index)
+      }).join().unwrap() ;
+
+      let client = Arc::new(Client::new(
+        options.rpc_url.as_ref().unwrap().as_ref(),
+        Auth::UserPass(options.bitcoin_rpc_user.as_ref().unwrap().clone(), options.bitcoin_rpc_pass.as_ref().unwrap().clone()),
+      ).unwrap());
+
+
 
       #[derive(OpenApi)]
       #[openapi(
@@ -402,10 +419,13 @@ impl Server {
         .route("/static/*path", get(Self::static_asset))
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
+          .route("/tx/simulate/:txid", get(Self::simulate_tx))
         .nest("/api", api_router)
         .layer(Extension(index))
         .layer(Extension(server_config.clone()))
         .layer(Extension(config))
+          .layer(Extension(client))
+          .layer(Extension(simulator_server))
         .layer(SetResponseHeaderLayer::if_not_present(
           header::CONTENT_SECURITY_POLICY,
           HeaderValue::from_static("default-src 'self'"),
@@ -1666,6 +1686,28 @@ impl Server {
     }
 
     Redirect::to(&destination)
+  }
+
+  async fn simulate_tx(Extension(client): Extension<Arc<Client>>, Extension(simulator): Extension<Option<SimulatorServer>>,Path(tx_id): Path<Txid>) -> ServerResult<Json<Vec<Receipt>>>  {
+    if simulator.is_none() {
+
+        return Err(ServerError::BadRequest("simulator not enabled".to_string()));
+    }
+
+    let tx = client.get_raw_transaction(&tx_id, None);
+    if tx.is_err() {
+      return Err(ServerError::BadRequest("tx not found".to_string()));
+    }
+
+
+    match simulator.unwrap().execute_tx(tx.as_ref().unwrap(), false) {
+      Ok(data) => {
+        Ok(Json(data))
+      }
+      Err(err) => {
+        Err(ServerError::BadRequest(err.to_string()))
+      }
+    }
   }
 }
 

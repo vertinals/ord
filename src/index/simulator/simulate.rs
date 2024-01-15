@@ -97,8 +97,8 @@ impl SimulatorServer {
                 self.execute_tx(tx, true)?;
             }
             ClientEvent::GetHeight => {
-                let height = self.internal_index.internal.block_count()?;
-                self.client.report_height(height)?;
+                let height = self.internal_index.internal.block_height()?.unwrap_or(Height(0));
+                self.client.report_height(height.0)?;
             }
             ClientEvent::TxDroped(tx) => {
                 let tx = tx.clone().into();
@@ -206,8 +206,8 @@ impl SimulatorServer {
 
     fn simulate_tx(&self, tx: &Transaction, wtx: &WriteTransaction, traces: Rc<RefCell<Vec<TraceNode>>>) -> crate::Result<Vec<Receipt>, SimulateError> {
         let brc20_receipts = Rc::new(RefCell::new(vec![]));
-        let height = self.internal_index.internal.block_count()?;
-        let block = self.internal_index.internal.get_block_by_height(height)?.unwrap();
+        let height = self.internal_index.internal.block_height()?.unwrap_or(Height(0));
+        let block = self.internal_index.internal.get_block_by_height(height.0)?.unwrap();
         let home_inscriptions = wtx.open_table(HOME_INSCRIPTIONS).unwrap();
         let inscription_id_to_sequence_number =
             wtx.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER).unwrap();
@@ -230,7 +230,7 @@ impl SimulatorServer {
         let ts = block.header.time;
         let ctx = SimulateContext {
             network: self.internal_index.internal.get_chain_network().clone(),
-            current_height: h,
+            current_height: h.0,
             current_block_time: ts as u32,
             internal_index: self.internal_index.clone(),
             ORD_TX_TO_OPERATIONS: Rc::new(RefCell::new(wtx.open_table(crate::index::ORD_TX_TO_OPERATIONS)?)),
@@ -323,8 +323,8 @@ impl SimulatorServer {
             _marker_b: Default::default(),
             _marker_tx: Default::default(),
         };
-        let height = self.internal_index.internal.block_count()?;
-        let block = self.internal_index.internal.get_block_by_height(height)?.unwrap();
+        let height = self.internal_index.internal.block_height()?.unwrap_or(Height(0));
+        let block = self.internal_index.internal.get_block_by_height(height.0)?.unwrap();
         let mut cache = self.tx_out_cache.borrow_mut();
         let cache = cache.deref_mut();
 
@@ -333,7 +333,7 @@ impl SimulatorServer {
             header: block.header,
             txdata: vec![(tx.clone(), tx.txid())],
         };
-        sim.index_block(block.clone(), height, cache, &processor, &mut operations)?;
+        sim.index_block(block.clone(), height.0, cache, &processor, &mut operations)?;
         processor.save_traces(&tx.txid())?;
 
         Ok(())
@@ -644,11 +644,11 @@ mod tests {
             .init();
         let opt = create_options();
         let internal = Arc::new(Index::open(&opt).unwrap());
-        let client = new_client_for_test("http://localhost:18443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
+        let client = new_client_for_test("http://localhost:28443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
         let simulate_server = SimulatorServer::new("./simulate", internal.clone(), client.clone()).unwrap();
 
         let client = client.clone().get_btc_client();
-        let tx = client.get_raw_transaction(&Txid::from_str("f9028dbd87d723399181d9bdb80a36e991b56405dfae2ccb6ee033d249b5f724").unwrap(), None).unwrap();
+        let tx = client.get_raw_transaction(&Txid::from_str("12353e95e2ed63f20655c437e98a16be75bfae8c10e049f7e4343653429d8821").unwrap(), None).unwrap();
         println!("{:?}", tx);
         simulate_server.execute_tx(&tx, true).unwrap();
         simulate_server.remove_tx_traces(&tx.txid()).unwrap();

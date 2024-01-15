@@ -93,7 +93,7 @@ pub struct Options {
 
   #[arg(
   long,
-  default_value = "false",
+  default_value = "true",
   help = "Set lru cache to <LRU_SIZE>. By default 10000000"
   )]
   pub(crate) simulate_enable: bool,
