@@ -127,6 +127,46 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       new_outpoints: vec![],
     })
   }
+
+  pub(super) fn produce_snapshot(&mut self, tx: &Transaction, txid: Txid) -> Result {
+    for tx_in in tx.input.iter() {
+      // skip subsidy since no inscriptions possible
+      if tx_in.previous_output.is_null() {
+        continue;
+      }
+
+      if self.tx_out_cache.get(&tx_in.previous_output).is_none() {
+        let tx_out = self.tx_out_receiver.blocking_recv().ok_or_else(|| {
+          anyhow!(
+            "failed to get transaction for {}",
+            tx_in.previous_output.txid
+          )
+        })?;
+        // received new tx out from chain node, add it to new_outpoints first and persist it in db later.
+        self.new_outpoints.push(tx_in.previous_output);
+        self
+          .tx_out_cache
+          .insert(tx_in.previous_output, tx_out.clone());
+      }
+    }
+
+    for (vout, tx_out) in tx.output.iter().enumerate() {
+      #[cfg(not(feature = "cache"))]
+      self.new_outpoints.push(OutPoint {
+        vout: vout as u32,
+        txid,
+      });
+      self.tx_out_cache.insert(
+        OutPoint {
+          vout: vout as u32,
+          txid,
+        },
+        tx_out.clone(),
+      );
+    }
+    Ok(())
+  }
+
   pub(super) fn index_envelopes(
     &mut self,
     tx: &Transaction,

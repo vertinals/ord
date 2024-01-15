@@ -61,15 +61,15 @@ impl<'index> Updater<'_> {
     let mut wtx = self.index.begin_write()?;
     let starting_height = u32::try_from(self.index.client.get_block_count()?).unwrap() + 1;
 
-    wtx
-      .open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?
-      .insert(
-        &self.height,
-        &SystemTime::now()
-          .duration_since(SystemTime::UNIX_EPOCH)
-          .map(|duration| duration.as_millis())
-          .unwrap_or(0),
-      )?;
+    // wtx
+    //   .open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?
+    //   .insert(
+    //     &self.height,
+    //     &SystemTime::now()
+    //       .duration_since(SystemTime::UNIX_EPOCH)
+    //       .map(|duration| duration.as_millis())
+    //       .unwrap_or(0),
+    //   )?;
 
     let mut progress_bar = if cfg!(test)
       || log_enabled!(log::Level::Info)
@@ -138,30 +138,30 @@ impl<'index> Updater<'_> {
         self.commit(wtx)?;
         uncommitted = 0;
         wtx = self.index.begin_write()?;
-        let height = wtx
-          .open_table(HEIGHT_TO_BLOCK_HEADER)?
-          .range(0..)?
-          .next_back()
-          .and_then(|result| result.ok())
-          .map(|(height, _hash)| height.value() + 1)
-          .unwrap_or(0);
-        if height != self.height {
-          // another update has run between committing and beginning the new
-          // write transaction
-          break;
-        }
+        // let height = wtx
+        //   .open_table(HEIGHT_TO_BLOCK_HEADER)?
+        //   .range(0..)?
+        //   .next_back()
+        //   .and_then(|result| result.ok())
+        //   .map(|(height, _hash)| height.value() + 1)
+        //   .unwrap_or(0);
+        // if height != self.height {
+        //   // another update has run between committing and beginning the new
+        //   // write transaction
+        //   break;
+        // }
         if should_break {
           break;
         }
-        wtx
-          .open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?
-          .insert(
-            &self.height,
-            &SystemTime::now()
-              .duration_since(SystemTime::UNIX_EPOCH)
-              .map(|duration| duration.as_millis())
-              .unwrap_or(0),
-          )?;
+        // wtx
+        //   .open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?
+        //   .insert(
+        //     &self.height,
+        //     &SystemTime::now()
+        //       .duration_since(SystemTime::UNIX_EPOCH)
+        //       .map(|duration| duration.as_millis())
+        //       .unwrap_or(0),
+        //   )?;
       } else if should_break {
         break;
       }
@@ -584,67 +584,68 @@ impl<'index> Updater<'_> {
       }
     } else if index_inscriptions {
       for (tx, txid) in block.txdata.iter().skip(1).chain(block.txdata.first()) {
-        inscription_updater.index_envelopes(tx, *txid, None)?;
+        //inscription_updater.index_envelopes(tx, *txid, None)?;
+        inscription_updater.produce_snapshot(tx, *txid)?;
       }
     }
     let ord_cost = start_time.elapsed().as_millis();
 
-    if index_inscriptions {
-      height_to_last_sequence_number
-        .insert(&self.height, inscription_updater.next_sequence_number)?;
-    }
-
-    statistic_to_count.insert(
-      &Statistic::LostSats.key(),
-      &if self.index.index_sats {
-        lost_sats
-      } else {
-        inscription_updater.lost_sats
-      },
-    )?;
-
-    statistic_to_count.insert(
-      &Statistic::CursedInscriptions.key(),
-      &inscription_updater.cursed_inscription_count,
-    )?;
-
-    statistic_to_count.insert(
-      &Statistic::BlessedInscriptions.key(),
-      &inscription_updater.blessed_inscription_count,
-    )?;
-
-    statistic_to_count.insert(
-      &Statistic::UnboundInscriptions.key(),
-      &inscription_updater.unbound_inscriptions,
-    )?;
+    // if index_inscriptions {
+    //   height_to_last_sequence_number
+    //     .insert(&self.height, inscription_updater.next_sequence_number)?;
+    // }
+    //
+    // statistic_to_count.insert(
+    //   &Statistic::LostSats.key(),
+    //   &if self.index.index_sats {
+    //     lost_sats
+    //   } else {
+    //     inscription_updater.lost_sats
+    //   },
+    // )?;
+    //
+    // statistic_to_count.insert(
+    //   &Statistic::CursedInscriptions.key(),
+    //   &inscription_updater.cursed_inscription_count,
+    // )?;
+    //
+    // statistic_to_count.insert(
+    //   &Statistic::BlessedInscriptions.key(),
+    //   &inscription_updater.blessed_inscription_count,
+    // )?;
+    //
+    // statistic_to_count.insert(
+    //   &Statistic::UnboundInscriptions.key(),
+    //   &inscription_updater.unbound_inscriptions,
+    // )?;
 
     inscription_updater.flush_cache()?;
 
-    let mut context = Context {
-      chain: BlockContext {
-        network: index.get_chain_network(),
-        blockheight: self.height,
-        blocktime: block.header.time,
-      },
-      tx_out_cache,
-      hit: 0,
-      miss: 0,
-      ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS)?,
-      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?,
-      COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
-        .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?,
-      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut sequence_number_to_inscription_entry,
-      OUTPOINT_TO_ENTRY: &mut outpoint_to_entry,
-      BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES)?,
-      BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN)?,
-      BRC20_EVENTS: &mut wtx.open_table(BRC20_EVENTS)?,
-      BRC20_TRANSFERABLELOG: &mut wtx.open_table(BRC20_TRANSFERABLELOG)?,
-      BRC20_INSCRIBE_TRANSFER: &mut wtx.open_table(BRC20_INSCRIBE_TRANSFER)?,
-    };
-
-    // Create a protocol manager to index the block of bitmap data.
-    let config = ProtocolConfig::new_with_options(&index.options);
-    ProtocolManager::new(config).index_block(&mut context, &block, operations)?;
+    // let mut context = Context {
+    //   chain: BlockContext {
+    //     network: index.get_chain_network(),
+    //     blockheight: self.height,
+    //     blocktime: block.header.time,
+    //   },
+    //   tx_out_cache,
+    //   hit: 0,
+    //   miss: 0,
+    //   ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS)?,
+    //   COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?,
+    //   COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
+    //     .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?,
+    //   SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut sequence_number_to_inscription_entry,
+    //   OUTPOINT_TO_ENTRY: &mut outpoint_to_entry,
+    //   BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES)?,
+    //   BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN)?,
+    //   BRC20_EVENTS: &mut wtx.open_table(BRC20_EVENTS)?,
+    //   BRC20_TRANSFERABLELOG: &mut wtx.open_table(BRC20_TRANSFERABLELOG)?,
+    //   BRC20_INSCRIBE_TRANSFER: &mut wtx.open_table(BRC20_INSCRIBE_TRANSFER)?,
+    // };
+    //
+    // // Create a protocol manager to index the block of bitmap data.
+    // let config = ProtocolConfig::new_with_options(&index.options);
+    // ProtocolManager::new(config).index_block(&mut context, &block, operations)?;
 
     if index.index_runes && self.height >= self.index.options.first_rune_height() {
       let mut outpoint_to_rune_balances = wtx.open_table(OUTPOINT_TO_RUNE_BALANCES)?;
@@ -693,18 +694,18 @@ impl<'index> Updater<'_> {
       }
     }
 
-    height_to_block_header.insert(&self.height, &block.header.store())?;
+    //height_to_block_header.insert(&self.height, &block.header.store())?;
 
     self.height += 1;
     self.outputs_traversed += outputs_in_block;
 
-    log::info!(
-      "Wrote {sat_ranges_written} sat ranges from {outputs_in_block} outputs in {}/{} ms, hit miss: {}/{}",
-      ord_cost,
-      (Instant::now() - start).as_millis(),
-      context.hit,
-      context.miss,
-    );
+    // log::info!(
+    //   "Wrote {sat_ranges_written} sat ranges from {outputs_in_block} outputs in {}/{} ms, hit miss: {}/{}",
+    //   ord_cost,
+    //   (Instant::now() - start).as_millis(),
+    //   context.hit,
+    //   context.miss,
+    // );
 
     Ok(())
   }
