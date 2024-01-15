@@ -97,6 +97,12 @@ pub struct Options {
     help = "(experimental) DB commit persist interval."
   )]
   pub(crate) commit_persist_interval: u64,
+  #[clap(
+  long,
+  default_value = "0",
+  help = "ignore the blocks before <START_HEIGHT>"
+  )]
+  pub(crate) start_height: u32,
 }
 
 #[derive(Debug, Clone)]

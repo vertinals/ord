@@ -48,7 +48,7 @@ impl<'index> Updater<'_> {
   pub(crate) fn new(index: &'index Index) -> Result<Updater<'index>> {
     Ok(Updater {
       range_cache: HashMap::new(),
-      height: index.block_count()?,
+      height: index.options.start_height,
       index,
       sat_ranges_since_flush: 0,
       outputs_cached: 0,
