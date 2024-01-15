@@ -19,20 +19,22 @@ use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
 use indexer_sdk::wait_exit_signal;
 use log::{error, info};
-use redb::{Database, WriteTransaction};
+use redb::{Database, ReadableTable, RedbValue, WriteTransaction};
 use tempfile::NamedTempFile;
 use tokio::runtime::Runtime;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use crate::{Index, Options, Sat, SatPoint};
 use crate::height::Height;
-use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, OUTPOINT_TO_ENTRY, OUTPOINT_TO_SAT_RANGES, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_SATPOINT, SIMULATE_TRACE_TABLE, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION};
+use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, InscriptionIdValue, ORD_TX_TO_OPERATIONS, OUTPOINT_TO_ENTRY, OUTPOINT_TO_SAT_RANGES, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_SATPOINT, SIMULATE_TRACE_TABLE, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION, TxidValue};
 use crate::index::entry::Entry;
 use crate::index::simulator::error::SimulateError;
 use crate::index::simulator::processor::{IndexWrapper, StorageProcessor};
 use crate::index::updater::pending_updater::PendingUpdater;
-use crate::okx::datastore::brc20::{Brc20Reader, Receipt};
+use crate::okx::datastore::brc20::{Brc20Reader, Receipt, Tick};
+use crate::okx::datastore::cache::CacheTableIndex;
 use crate::okx::datastore::ord::InscriptionOp;
+use crate::okx::datastore::ScriptKey;
 use crate::okx::lru::SimpleLru;
 use crate::okx::protocol::{ProtocolConfig, ProtocolManager};
 use crate::okx::protocol::simulate::SimulateContext;
@@ -98,10 +100,94 @@ impl SimulatorServer {
                 let height = self.internal_index.internal.block_count()?;
                 self.client.report_height(height)?;
             }
-            ClientEvent::TxDroped(_) => {}
-            ClientEvent::TxConfirmed(_) => {}
+            ClientEvent::TxDroped(tx) => {
+                let tx = tx.clone().into();
+                self.remove_tx_traces(&tx)?;
+            }
+            ClientEvent::TxConfirmed(tx) => {
+                let tx = tx.clone().into();
+                self.remove_tx_traces(&tx)?;
+            }
         }
         Ok(())
+    }
+    fn remove_tx_traces(&self, txid: &Txid) -> crate::Result<()> {
+        let mut wtx = self.simulate_index.begin_write()?;
+        let commit = self.do_remove_traces(txid, &wtx)?;
+        if commit {
+            wtx.commit()?;
+        }
+        Ok(())
+    }
+    fn do_remove_traces(&self, txid: &Txid, wtx: &WriteTransaction) -> crate::Result<bool> {
+        let traces_table = wtx.open_table(SIMULATE_TRACE_TABLE)?;
+        let value = txid.store();
+        let traces = traces_table.get(&value)?;
+        if traces.is_none() {
+            return Ok(false);
+        }
+
+        let mut brc20_balances = wtx.open_table(BRC20_BALANCES)?;
+        let mut brc20_token = wtx.open_table(BRC20_TOKEN)?;
+        let mut events = wtx.open_table(BRC20_EVENTS)?;
+        let mut brc20_transferlog = wtx.open_table(BRC20_TRANSFERABLELOG)?;
+        let mut brc20_inscribe_transfer = wtx.open_table(BRC20_INSCRIBE_TRANSFER)?;
+        let mut ord_tx_id_to_operations = wtx.open_table(ORD_TX_TO_OPERATIONS)?;
+        let mut collections_key_to_inscription_id = wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?;
+        let mut collection_inscription_id_to_kinds = wtx.open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?;
+        let binding = traces.unwrap();
+        let traces = binding.value();
+        let traces: Vec<TraceNode> = rmp_serde::from_slice(traces)?;
+        for node in traces {
+            let key = node.key;
+            match node.trace_type {
+                CacheTableIndex::TXID_TO_INSCRIPTION_RECEIPTS => {}
+                CacheTableIndex::SEQUENCE_NUMBER_TO_SATPOINT => {}
+                CacheTableIndex::SAT_TO_SEQUENCE_NUMBER => {}
+                CacheTableIndex::HOME_INSCRIPTIONS => {}
+                CacheTableIndex::INSCRIPTION_ID_TO_SEQUENCE_NUMBER => {}
+                CacheTableIndex::SEQUENCE_NUMBER_TO_CHILDREN => {}
+                CacheTableIndex::SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY => {}
+                CacheTableIndex::INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER => {}
+                CacheTableIndex::OUTPOINT_TO_ENTRY => {}
+                CacheTableIndex::BRC20_BALANCES => {
+                    let key = String::from_utf8(key).unwrap();
+                    let key = key.as_str();
+                    brc20_balances.remove(key)?;
+                }
+                CacheTableIndex::BRC20_TOKEN => {
+                    let key = String::from_utf8(key).unwrap();
+                    let key = key.as_str();
+                    brc20_token.remove(key)?;
+                }
+                CacheTableIndex::BRC20_EVENTS => {
+                    let key = key.as_slice();
+                    let key: &Txid = &rmp_serde::from_slice(key).unwrap();
+                    events.remove(&key.store())?;
+                }
+                CacheTableIndex::BRC20_TRANSFERABLELOG => {
+                    let key = String::from_utf8(key).unwrap();
+                    brc20_transferlog.remove(key.as_str())?;
+                }
+                CacheTableIndex::BRC20_INSCRIBE_TRANSFER => {
+                    let key = InscriptionIdValue::from_bytes(key.as_slice());
+                    brc20_inscribe_transfer.remove(&key)?;
+                }
+                CacheTableIndex::ORD_TX_TO_OPERATIONS => {
+                    let key: [u8; 32] = key.as_slice().try_into().unwrap();
+                    ord_tx_id_to_operations.remove(&key)?;
+                }
+                CacheTableIndex::COLLECTIONS_KEY_TO_INSCRIPTION_ID => {
+                    let key = String::from_utf8(key).unwrap();
+                    collections_key_to_inscription_id.remove(key.as_str())?;
+                }
+                CacheTableIndex::COLLECTIONS_INSCRIPTION_ID_TO_KINDS => {
+                    let key = InscriptionIdValue::from_bytes(&key);
+                    collection_inscription_id_to_kinds.remove(&key)?;
+                }
+            }
+        }
+        Ok(true)
     }
     async fn get_client_event(&self) -> crate::Result<ClientEvent, SimulateError> {
         let ret = self.client.block_get_event()?;
@@ -565,6 +651,7 @@ mod tests {
         let tx = client.get_raw_transaction(&Txid::from_str("f9028dbd87d723399181d9bdb80a36e991b56405dfae2ccb6ee033d249b5f724").unwrap(), None).unwrap();
         println!("{:?}", tx);
         simulate_server.execute_tx(&tx, true).unwrap();
+        simulate_server.remove_tx_traces(&tx.txid()).unwrap();
     }
 
     fn create_options() -> Options {

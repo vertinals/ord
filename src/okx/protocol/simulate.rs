@@ -792,7 +792,7 @@ use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_
 use crate::index::entry::Entry;
 use crate::index::simulator::processor::IndexWrapper;
 use crate::okx::datastore::brc20::{Balance, Brc20Reader, Brc20ReaderWriter, Receipt, Tick, TokenInfo, TransferableLog, TransferInfo};
-use crate::okx::datastore::brc20::redb::script_tick_id_key;
+use crate::okx::datastore::brc20::redb::{script_tick_id_key, script_tick_key};
 use crate::okx::datastore::brc20::redb::table::{get_balance, get_balances, get_inscribe_transfer_inscription, get_token_info, get_tokens_info, get_transaction_receipts, get_transferable, get_transferable_by_id, get_transferable_by_tick, insert_inscribe_transfer_inscription, insert_token_info, insert_transferable, remove_inscribe_transfer_inscription, remove_transferable, save_transaction_receipts, update_token_balance};
 use crate::okx::datastore::cache::CacheTableIndex;
 use crate::okx::datastore::ord::{InscriptionOp, OrdReader, OrdReaderWriter};
@@ -991,7 +991,9 @@ impl<'a, 'db, 'txn> Brc20Reader for SimulateContext<'a, 'db, 'txn> {
 impl<'a, 'db, 'txn> Brc20ReaderWriter for SimulateContext<'a, 'db, 'txn> {
     fn update_token_balance(&mut self, script_key: &ScriptKey, new_balance: Balance) -> crate::Result<(), Self::Error> {
         let mut traces = self.traces.borrow_mut();
-        let key = serde_json::to_vec(script_key).unwrap();
+        let binding = script_tick_key(script_key, &new_balance.tick);
+        let key = binding.as_str();
+        let key = key.as_bytes().to_vec();
         traces.push(TraceNode { trace_type: CacheTableIndex::BRC20_BALANCES, key });
         let mut table = self.BRC20_BALANCES.borrow_mut();
         update_token_balance(&mut table, script_key, new_balance)
@@ -999,7 +1001,8 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for SimulateContext<'a, 'db, 'txn> {
 
     fn insert_token_info(&mut self, tick: &Tick, new_info: &TokenInfo) -> crate::Result<(), Self::Error> {
         let mut traces = self.traces.borrow_mut();
-        let key = tick.as_str();
+        let binding = tick.to_lowercase().hex();
+        let key =binding.as_str();
         let key = key.as_bytes().to_vec();
         traces.push(TraceNode { trace_type: CacheTableIndex::BRC20_TOKEN, key });
 
@@ -1018,6 +1021,9 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for SimulateContext<'a, 'db, 'txn> {
     }
 
     fn save_transaction_receipts(&mut self, txid: &Txid, receipt: &[Receipt]) -> crate::Result<(), Self::Error> {
+        let mut traces = self.traces.borrow_mut();
+        let key = rmp_serde::to_vec(txid).unwrap();
+        traces.push(TraceNode { trace_type: CacheTableIndex::BRC20_EVENTS, key });
         let mut receipts = self.brc20_receipts.borrow_mut();
         receipts.extend_from_slice(receipt);
         let mut table = self.BRC20_EVENTS.borrow_mut();
