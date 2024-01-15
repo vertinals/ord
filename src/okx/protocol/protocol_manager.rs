@@ -33,41 +33,29 @@ impl ProtocolManager {
     context: &mut Context,
     tx: &Transaction,
     txid: &Txid,
-    operations: &HashMap<Txid, Vec<InscriptionOp>>,
+    tx_operations: &Vec<InscriptionOp>,
   ) -> Result {
-    // skip coinbase transaction.
-    if tx
-      .input
-      .first()
-      .is_some_and(|tx_in| tx_in.previous_output.is_null())
+    // save all transaction operations to ord database.
+    if self.config.enable_ord_receipts
+      && context.chain.blockheight >= self.config.first_inscription_height
     {
-      return Ok(());
+      let start = Instant::now();
+      context.save_transaction_operations(txid, tx_operations)?;
+      context.inscriptions_size += tx_operations.len();
+      context.save_cost += start.elapsed().as_micros();
     }
 
-    // index inscription operations.
-    if let Some(tx_operations) = operations.get(txid) {
-      // save all transaction operations to ord database.
-      if self.config.enable_ord_receipts
-        && context.chain.blockheight >= self.config.first_inscription_height
-      {
-        let start = Instant::now();
-        context.save_transaction_operations(txid, tx_operations)?;
-        context.inscriptions_size += tx_operations.len();
-        context.save_cost += start.elapsed().as_micros();
-      }
+    let start = Instant::now();
+    // Resolve and execute messages.
+    let messages = self
+      .resolve_man
+      .resolve_message(context, tx, tx_operations)?;
+    context.resolve_cost += start.elapsed().as_micros();
 
-      let start = Instant::now();
-      // Resolve and execute messages.
-      let messages = self
-        .resolve_man
-        .resolve_message(context, tx, tx_operations)?;
-      context.resolve_cost += start.elapsed().as_micros();
-
-      let start = Instant::now();
-      self.call_man.execute_message(context, txid, &messages)?;
-      context.execute_cost += start.elapsed().as_micros();
-      context.messages_size += messages.len();
-    }
+    let start = Instant::now();
+    self.call_man.execute_message(context, txid, &messages)?;
+    context.execute_cost += start.elapsed().as_micros();
+    context.messages_size += messages.len();
 
     Ok(())
   }
@@ -82,7 +70,19 @@ impl ProtocolManager {
 
     // skip the coinbase transaction.
     for (tx, txid) in block.txdata.iter() {
-      self.index_tx(context, tx, txid, &operations)?;
+      // skip coinbase transaction.
+      if tx
+        .input
+        .first()
+        .is_some_and(|tx_in| tx_in.previous_output.is_null())
+      {
+        continue;
+      }
+
+      // index inscription operations.
+      if let Some(tx_operations) = operations.get(txid) {
+        self.index_tx(context, tx, txid, tx_operations)?;
+      }
     }
 
     let bitmap_start = Instant::now();
