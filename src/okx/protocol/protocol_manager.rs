@@ -84,7 +84,7 @@ impl ProtocolManager {
     let cost4 = bitmap_start.elapsed().as_millis();
 
     log::info!(
-      "Protocol Manager indexed block {} with ord inscriptions {}, messages {}, bitmap {} in {} ms, {}/{}/{}/{}",
+      "Protocol Manager indexed block {} with ord inscriptions {}, messages {}, bitmap {} in {} ms, {}/{}/{}/{}, hit/miss {}/{}",
       context.chain.blockheight,
       inscriptions_size,
       messages_size,
@@ -94,6 +94,8 @@ impl ProtocolManager {
       cost2/1000,
       cost3/1000,
       cost4,
+      context.hit,
+      context.miss,
     );
     Ok(())
   }
