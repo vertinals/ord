@@ -105,11 +105,6 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         Ok(v)
     }
     pub fn id_to_sequence_number_get(&self, x: &InscriptionIdValue) -> crate::Result<Option<u32>> {
-        let table = self.id_to_sequence_number.borrow();
-        let v = table.get(x)?;
-        if let Some(v) = v {
-            return Ok(Some(v.value()));
-        }
         let ret = self.internal.use_internal_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER, |table| {
             let value = table.get(x).map_err(|e| {
                 anyhow!("id_to_sequence_number_get error:{}",e)
@@ -122,14 +117,14 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         if let Some(ret) = ret {
             return Ok(Some(ret));
         }
+        let table = self.id_to_sequence_number.borrow();
+        let v = table.get(x)?;
+        if let Some(v) = v {
+            return Ok(Some(v.value()));
+        }
         Ok(None)
     }
     pub fn sequence_number_to_entry_get(&self, initial_inscription_sequence_number: u32) -> crate::Result<Option<InscriptionEntryValue>> {
-        let table = self.sequence_number_to_inscription_entry.borrow();
-        let value = table.get(initial_inscription_sequence_number)?;
-        if let Some(v) = value {
-            return Ok(Some(v.value()));
-        }
         let ret = self.internal.use_internal_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, |table| {
             let ret = table.get(initial_inscription_sequence_number).map_err(move |e| {
                 anyhow!("sequence_number_to_entry_get error:{}",e)
@@ -142,57 +137,62 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         if let Some(ret) = ret {
             return Ok(Some(ret));
         }
+        let table = self.sequence_number_to_inscription_entry.borrow();
+        let value = table.get(initial_inscription_sequence_number)?;
+        if let Some(v) = value {
+            return Ok(Some(v.value()));
+        }
         Ok(None)
     }
     pub fn get_lost_sats(&self) -> crate::Result<u64> {
-        let table = self.statistic_to_count.borrow();
-        let ret = table
-            .get(&Statistic::LostSats.key())?
-            .map(|lost_sats| lost_sats.value())
-            .unwrap_or(0);
+        let ret = self.internal.use_internal_table(STATISTIC_TO_COUNT, |table| Ok({
+            table
+                .get(&Statistic::LostSats.key())?
+                .map(|lost_sats| lost_sats.value())
+                .unwrap_or(0)
+        }))?;
         if ret == 0 {
-            let ret = self.internal.use_internal_table(STATISTIC_TO_COUNT, |table| Ok({
-                table
-                    .get(&Statistic::LostSats.key())?
-                    .map(|lost_sats| lost_sats.value())
-                    .unwrap_or(0)
-            }))?;
+            let table = self.statistic_to_count.borrow();
+            let ret = table
+                .get(&Statistic::LostSats.key())?
+                .map(|lost_sats| lost_sats.value())
+                .unwrap_or(0);
             return Ok(ret);
         }
         return Ok(ret);
     }
     pub fn get_cursed_inscription_count(&self) -> crate::Result<u64> {
-        let table = self.statistic_to_count.borrow();
-        let ret = table
-            .get(&Statistic::CursedInscriptions.key())?
-            .map(|count| count.value())
-            .unwrap_or(0);
-        if ret != 0 {
-            return Ok(ret);
-        }
         let ret = self.internal.use_internal_table(STATISTIC_TO_COUNT, |table| Ok({
             table
                 .get(&Statistic::CursedInscriptions.key())?
                 .map(|count| count.value())
                 .unwrap_or(0)
         }))?;
-        return Ok(ret);
-    }
-    pub fn get_blessed_inscription_count(&self) -> crate::Result<u64> {
-        let table = self.statistic_to_count.borrow();
-        let ret = table
-            .get(&Statistic::BlessedInscriptions.key())?
-            .map(|count| count.value())
-            .unwrap_or(0);
         if ret != 0 {
             return Ok(ret);
         }
+        let table = self.statistic_to_count.borrow();
+        let ret = table
+            .get(&Statistic::CursedInscriptions.key())?
+            .map(|count| count.value())
+            .unwrap_or(0);
+        return Ok(ret);
+    }
+    pub fn get_blessed_inscription_count(&self) -> crate::Result<u64> {
         let ret = self.internal.use_internal_table(STATISTIC_TO_COUNT, |table| Ok({
             table
                 .get(&Statistic::BlessedInscriptions.key())?
                 .map(|count| count.value())
                 .unwrap_or(0)
         }))?;
+        if ret != 0 {
+            return Ok(ret);
+        }
+        let table = self.statistic_to_count.borrow();
+        let ret = table
+            .get(&Statistic::BlessedInscriptions.key())?
+            .map(|count| count.value())
+            .unwrap_or(0);
         Ok(ret)
     }
     pub fn get_unbound_inscriptions(&self) -> crate::Result<u64> {
@@ -266,99 +266,46 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
     pub fn sequence_number_to_satpoint_insert(&self, sequence_number: u32, sat_point: &SatPointValue) -> crate::Result<()> {
         let mut table = self.sequence_number_to_satpoint.borrow_mut();
         table.insert(sequence_number, sat_point)?;
-
-        // let key = u32::as_bytes(&sequence_number).to_vec();
-        // let value = sat_point.to_vec();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::SEQUENCE_NUMBER_TO_SATPOINT, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
         Ok(())
     }
     pub fn satpoint_to_sequence_number_insert(&self, sat_point: &SatPointValue, sequence: u32) -> crate::Result<()> {
         let mut table = self.sequence_number_to_satpoint.borrow_mut();
         table.insert(sequence, sat_point)?;
-
-        // let key = sat_point.to_vec();
-        // let value = u32::as_bytes(&sequence).to_vec();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::SAT_TO_SEQUENCE_NUMBER, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
         Ok(())
     }
     pub fn home_inscriptions_pop_first(&self) -> crate::Result<()> {
         let mut table = self.home_inscriptions.borrow_mut();
         table.pop_first()?;
-
-        // self.cache_writer.use_cache_mut(CacheTableIndex::HOME_INSCRIPTIONS, |v| {
-        //     v.pop_first()
-        // });
         Ok(())
     }
     pub fn home_inscriptions_insert(&self, sequence_number: &u32, value: InscriptionIdValue) -> crate::Result<()> {
-        // let key = u32::as_bytes(sequence_number).to_vec();
-        // let value = InscriptionIdValue::as_bytes(&value).to_vec();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::HOME_INSCRIPTIONS, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
-
         let mut table = self.home_inscriptions.borrow_mut();
         table
             .insert(sequence_number, value)?;
         Ok(())
     }
     pub fn id_to_sequence_number_insert(&self, value: &InscriptionIdValue, sequence_number: u32) -> crate::Result<()> {
-        // let key = rmp_serde::to_vec(value).unwrap();
-        // let value = sequence.to_le_bytes().as_slice();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::INSCRIPTION_ID_TO_SEQUENCE_NUMBER, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
         let mut table = self.id_to_sequence_number.borrow_mut();
         table
             .insert(value, sequence_number)?;
         Ok(())
     }
     pub fn sequence_number_to_children_insert(&self, parent_sequence_number: u32, sequence_number: u32) -> crate::Result<()> {
-        // let key = sequence.to_le_bytes().as_slice();
-        // let value = rmp_serde::to_vec(value).unwrap();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::SEQUENCE_NUMBER_TO_CHILDREN, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
         let mut table = self.sequence_number_to_children.borrow_mut();
         table.insert(parent_sequence_number, sequence_number)?;
         Ok(())
     }
     pub fn sequence_number_to_entry_insert(&self, sequence: u32, value: &InscriptionEntryValue) -> crate::Result<()> {
-        // let key = sequence.to_le_bytes().as_slice();
-        // let value = rmp_serde::to_vec(value).unwrap();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
         let mut table = self.sequence_number_to_inscription_entry.borrow_mut();
         table.insert(sequence, value)?;
         Ok(())
     }
     pub fn sat_to_sequence_number_insert(&self, n: &u64, sequence_number: &u32) -> crate::Result<()> {
-        // let key = n.to_le_bytes().as_slice();
-        // let value = sequence.to_le_bytes().as_slice();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::SAT_TO_SEQUENCE_NUMBER, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
         let mut table = self.sat_to_sequence_number.borrow_mut();
         table.insert(n, sequence_number)?;
         Ok(())
     }
     pub fn inscription_number_to_sequence_number_insert(&self, inscription_number: i32, sequence_number: u32) -> crate::Result<()> {
-        // let key = inscription_number.to_le_bytes().as_slice();
-        // let value = sequence_number.to_le_bytes().as_slice();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
         let mut table = self.inscription_number_to_sequence_number.borrow_mut();
         table.insert(inscription_number, sequence_number)?;
         Ok(())
@@ -367,12 +314,6 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
         let mut table = self.outpoint_to_entry.borrow_mut();
         table.insert(value, entry)?;
         Ok(())
-        // let key = rmp_serde::to_vec(value).unwrap();
-        // let value = entry.to_vec();
-        // self.cache_writer.use_cache_mut(CacheTableIndex::OUTPOINT_TO_ENTRY, |v| {
-        //     v.insert(key.to_vec(), value.to_vec());
-        // });
-        // Ok(())
     }
     pub fn transaction_id_to_transaction_insert(&self, tx_id: &TxidValue, value: &[u8]) -> crate::Result<()> {
         let mut table = self.transaction_id_to_transaction.borrow_mut();

@@ -789,9 +789,12 @@ use redb::{Database, MultimapTable, ReadableTable, ReadOnlyTable, RedbKey, RedbV
 use tempfile::NamedTempFile;
 use crate::{Index, InscriptionId, SatPoint};
 use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, TxidValue};
+use crate::index::entry::Entry;
 use crate::index::simulator::processor::IndexWrapper;
 use crate::okx::datastore::brc20::{Balance, Brc20Reader, Brc20ReaderWriter, Receipt, Tick, TokenInfo, TransferableLog, TransferInfo};
+use crate::okx::datastore::brc20::redb::script_tick_id_key;
 use crate::okx::datastore::brc20::redb::table::{get_balance, get_balances, get_inscribe_transfer_inscription, get_token_info, get_tokens_info, get_transaction_receipts, get_transferable, get_transferable_by_id, get_transferable_by_tick, insert_inscribe_transfer_inscription, insert_token_info, insert_transferable, remove_inscribe_transfer_inscription, remove_transferable, save_transaction_receipts, update_token_balance};
+use crate::okx::datastore::cache::CacheTableIndex;
 use crate::okx::datastore::ord::{InscriptionOp, OrdReader, OrdReaderWriter};
 use crate::okx::datastore::ord::collections::CollectionKind;
 use crate::okx::datastore::ord::redb::table::{get_collection_inscription_id, get_collections_of_inscription, get_inscription_number_by_sequence_number, get_transaction_operations, get_txout_by_outpoint, save_transaction_operations, set_inscription_attributes, set_inscription_by_collection_key};
@@ -821,7 +824,7 @@ pub struct SimulateContext<'a, 'db, 'txn> {
     pub(crate) BRC20_TRANSFERABLELOG: Rc<RefCell<Table<'db, 'txn, &'static str, &'static [u8]>>>,
     pub(crate) BRC20_INSCRIBE_TRANSFER: Rc<RefCell<Table<'db, 'txn, InscriptionIdValue, &'static [u8]>>>,
     pub traces: Rc<RefCell<Vec<TraceNode>>>,
-    pub brc20_receipts:Rc<RefCell<Vec<Receipt>>>,
+    pub brc20_receipts: Rc<RefCell<Vec<Receipt>>>,
     pub _marker_a: PhantomData<&'a ()>,
 }
 
@@ -987,11 +990,19 @@ impl<'a, 'db, 'txn> Brc20Reader for SimulateContext<'a, 'db, 'txn> {
 
 impl<'a, 'db, 'txn> Brc20ReaderWriter for SimulateContext<'a, 'db, 'txn> {
     fn update_token_balance(&mut self, script_key: &ScriptKey, new_balance: Balance) -> crate::Result<(), Self::Error> {
+        let mut traces = self.traces.borrow_mut();
+        let key = serde_json::to_vec(script_key).unwrap();
+        traces.push(TraceNode { trace_type: CacheTableIndex::BRC20_BALANCES, key });
         let mut table = self.BRC20_BALANCES.borrow_mut();
         update_token_balance(&mut table, script_key, new_balance)
     }
 
     fn insert_token_info(&mut self, tick: &Tick, new_info: &TokenInfo) -> crate::Result<(), Self::Error> {
+        let mut traces = self.traces.borrow_mut();
+        let key = tick.as_str();
+        let key = key.as_bytes().to_vec();
+        traces.push(TraceNode { trace_type: CacheTableIndex::BRC20_TOKEN, key });
+
         let mut binding = self.BRC20_TOKEN.borrow_mut();
         let table = binding.deref_mut();
         insert_token_info(table, tick, new_info)
@@ -1007,13 +1018,18 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for SimulateContext<'a, 'db, 'txn> {
     }
 
     fn save_transaction_receipts(&mut self, txid: &Txid, receipt: &[Receipt]) -> crate::Result<(), Self::Error> {
-        let mut receipts=self.brc20_receipts.borrow_mut();
+        let mut receipts = self.brc20_receipts.borrow_mut();
         receipts.extend_from_slice(receipt);
         let mut table = self.BRC20_EVENTS.borrow_mut();
         save_transaction_receipts(&mut table, txid, receipt)
     }
 
     fn insert_transferable(&mut self, script: &ScriptKey, tick: &Tick, inscription: &TransferableLog) -> crate::Result<(), Self::Error> {
+        let mut traces = self.traces.borrow_mut();
+        let binding = script_tick_id_key(script, tick, &inscription.inscription_id);
+        let key = binding.as_str();
+        let key = key.as_bytes().to_vec();
+        traces.push(TraceNode { trace_type: CacheTableIndex::BRC20_TRANSFERABLELOG, key });
         let mut table = self.BRC20_TRANSFERABLELOG.borrow_mut();
         insert_transferable(&mut table, script, tick, inscription)
     }
@@ -1024,6 +1040,10 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for SimulateContext<'a, 'db, 'txn> {
     }
 
     fn insert_inscribe_transfer_inscription(&mut self, inscription_id: &InscriptionId, transfer_info: TransferInfo) -> crate::Result<(), Self::Error> {
+        let mut traces = self.traces.borrow_mut();
+        let key = &inscription_id.store();
+        let key = InscriptionIdValue::as_bytes(&key);
+        traces.push(TraceNode { trace_type: CacheTableIndex::BRC20_INSCRIBE_TRANSFER, key });
         let mut table = self.BRC20_INSCRIBE_TRANSFER.borrow_mut();
         insert_inscribe_transfer_inscription(&mut table, inscription_id, transfer_info)
     }
@@ -1036,16 +1056,27 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for SimulateContext<'a, 'db, 'txn> {
 
 impl<'a, 'db, 'txn> OrdReaderWriter for SimulateContext<'a, 'db, 'txn> {
     fn save_transaction_operations(&mut self, txid: &Txid, operations: &[InscriptionOp]) -> crate::Result<(), Self::Error> {
+        let mut traces = self.traces.borrow_mut();
+        let key = &txid.store();
+        let key = TxidValue::as_slice(key).to_vec();
+        traces.push(TraceNode { trace_type: CacheTableIndex::ORD_TX_TO_OPERATIONS, key });
         let mut table = self.ORD_TX_TO_OPERATIONS.borrow_mut();
         save_transaction_operations(&mut table, txid, operations)
     }
 
     fn set_inscription_by_collection_key(&mut self, key: &str, inscription_id: &InscriptionId) -> crate::Result<(), Self::Error> {
+        let mut traces = self.traces.borrow_mut();
+        let trace_key = key.as_bytes().to_vec();
+        traces.push(TraceNode { trace_type: CacheTableIndex::COLLECTIONS_KEY_TO_INSCRIPTION_ID, key: trace_key });
         let mut table = self.COLLECTIONS_KEY_TO_INSCRIPTION_ID.borrow_mut();
         set_inscription_by_collection_key(&mut table, key, inscription_id)
     }
 
     fn set_inscription_attributes(&mut self, inscription_id: &InscriptionId, kind: &[CollectionKind]) -> crate::Result<(), Self::Error> {
+        let mut traces = self.traces.borrow_mut();
+        let key = inscription_id.store();
+        let key = InscriptionIdValue::as_bytes(&key);
+        traces.push(TraceNode { trace_type: CacheTableIndex::COLLECTIONS_INSCRIPTION_ID_TO_KINDS, key });
         let mut table = self.COLLECTIONS_INSCRIPTION_ID_TO_KINDS.borrow_mut();
         set_inscription_attributes(
             &mut table,

@@ -11,7 +11,7 @@ use anyhow::anyhow;
 use bitcoin::{OutPoint, Transaction, Txid, TxOut};
 use indexer_sdk::client::drect::DirectClient;
 use indexer_sdk::client::event::ClientEvent;
-use indexer_sdk::client::SyncClient;
+use indexer_sdk::client::{SyncClient};
 use indexer_sdk::configuration::base::{IndexerConfiguration, NetConfiguration, ZMQConfiguration};
 use indexer_sdk::factory::common::async_create_and_start_processor;
 use indexer_sdk::storage::db::memory::MemoryDB;
@@ -94,7 +94,10 @@ impl SimulatorServer {
             ClientEvent::Transaction(tx) => {
                 self.execute_tx(tx, true)?;
             }
-            ClientEvent::GetHeight => {}
+            ClientEvent::GetHeight => {
+                let height = self.internal_index.internal.block_count()?;
+                self.client.report_height(height)?;
+            }
             ClientEvent::TxDroped(_) => {}
             ClientEvent::TxConfirmed(_) => {}
         }
@@ -247,8 +250,8 @@ impl SimulatorServer {
         Ok(())
     }
 
-    pub fn new(path:impl AsRef<Path>, internal_index: Arc<Index>, client:DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> crate::Result<Self> {
-        let simulate_index =Database::create(path)?;
+    pub fn new(path: impl AsRef<Path>, internal_index: Arc<Index>, client: DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>) -> crate::Result<Self> {
+        let simulate_index = Database::create(path)?;
         let simulate_index = Arc::new(simulate_index);
         Ok(Self { tx_out_cache: Rc::new(RefCell::new(SimpleLru::new(500))), internal_index: IndexWrapper::new(internal_index), simulate_index, client })
     }
@@ -506,9 +509,9 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
     let (server, handlers) = rt.block_on(async {
         let ret = async_create_and_start_processor(rx.clone(), config).await;
         let mut handlers = ret.1;
-        let server = SimulatorServer::new(ops.simulate_index.unwrap(),internal.clone(),ret.0).unwrap();
+        let server = SimulatorServer::new(ops.simulate_index.unwrap(), internal.clone(), ret.0).unwrap();
         handlers.push(server.clone().start(rx.clone()).await);
-        (server,handlers)
+        (server, handlers)
     });
 
     thread::spawn(move || {
@@ -553,7 +556,7 @@ mod tests {
         let opt = create_options();
         let internal = Arc::new(Index::open(&opt).unwrap());
         let client = new_client_for_test("http://localhost:18443".to_string(), "bitcoinrpc".to_string(), "bitcoinrpc".to_string());
-        let simulate_server = SimulatorServer::new("./simulate", internal.clone(),  client.clone()).unwrap();
+        let simulate_server = SimulatorServer::new("./simulate", internal.clone(), client.clone()).unwrap();
 
         let client = client.clone().get_btc_client();
         let tx = client.get_raw_transaction(&Txid::from_str("f9028dbd87d723399181d9bdb80a36e991b56405dfae2ccb6ee033d249b5f724").unwrap(), None).unwrap();
