@@ -49,6 +49,7 @@ use {
 };
 use crate::index::simulator::simulate::{Simulator, SimulatorServer, start_simulator};
 use crate::okx::datastore::brc20::Receipt;
+use crate::okx::datastore::brc20::redb::table::get_transaction_receipts;
 
 mod accept_encoding;
 mod accept_json;
@@ -420,6 +421,7 @@ impl Server {
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
           .route("/tx/simulate/:txid", get(Self::simulate_tx))
+          .route("/tx/multiple_receipt/:txid",get(Self::confirm_or_pending_receipt))
         .nest("/api", api_router)
         .layer(Extension(index))
         .layer(Extension(server_config.clone()))
@@ -1709,6 +1711,23 @@ impl Server {
       }
     }
   }
+
+  async fn confirm_or_pending_receipt(Extension(index): Extension<Arc<Index>>, Extension(simulator): Extension<Option<SimulatorServer>>, Path(tx_id): Path<Txid>) -> ServerResult<Json<MultipleReceipt>>{
+    let pending_receipt = simulator.unwrap().get_receipt(tx_id.clone()).unwrap_or(Vec::new());
+    let confirm_receipt = index.brc20_get_tx_events_by_txid(&tx_id).unwrap_or(Some(Vec::new()));
+    let receipt = MultipleReceipt {
+      confirm: confirm_receipt,
+      pending: Some(pending_receipt),
+    };
+
+    Ok(Json(receipt))
+  }
+}
+
+#[derive(Serialize, Deserialize)]
+struct MultipleReceipt {
+  pub confirm: Option<Vec<crate::okx::datastore::brc20::Receipt>>,
+  pub pending: Option<Vec<crate::okx::datastore::brc20::Receipt>>,
 }
 
 #[cfg(test)]

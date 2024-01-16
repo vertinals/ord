@@ -24,7 +24,7 @@ use tempfile::NamedTempFile;
 use tokio::runtime::Runtime;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use crate::{Index, Options, Sat, SatPoint};
+use crate::{Index, InscriptionId, Options, Sat, SatPoint};
 use crate::height::Height;
 use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, InscriptionIdValue, ORD_TX_TO_OPERATIONS, OUTPOINT_TO_ENTRY, OUTPOINT_TO_SAT_RANGES, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_SATPOINT, SIMULATE_TRACE_TABLE, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION, TxidValue};
 use crate::index::entry::Entry;
@@ -32,6 +32,7 @@ use crate::index::simulator::error::SimulateError;
 use crate::index::simulator::processor::{IndexWrapper, StorageProcessor};
 use crate::index::updater::pending_updater::PendingUpdater;
 use crate::okx::datastore::brc20::{Brc20Reader, Receipt, Tick};
+use crate::okx::datastore::brc20::redb::table::get_transaction_receipts;
 use crate::okx::datastore::cache::CacheTableIndex;
 use crate::okx::datastore::ord::InscriptionOp;
 use crate::okx::datastore::ScriptKey;
@@ -209,6 +210,29 @@ impl SimulatorServer {
         Ok(ret)
     }
 
+    pub fn get_receipt(&self,tx_id: Txid) -> Result<Vec<Receipt>,anyhow::Error> {
+        let rx = self.simulate_index.begin_read()?;
+        let tab = rx.open_table(BRC20_EVENTS)?;
+        let ret = get_transaction_receipts(&tab, &tx_id)?;
+        Ok(ret)
+        // let mut simulate_receipts = ret.into_iter().map(|v| {
+        //     (v.inscription_id.clone(), v)
+        // }).collect::<HashMap<InscriptionId, Receipt>>();
+        // let internal = self.internal_index.use_internal_table(BRC20_EVENTS, |table| {
+        //     get_transaction_receipts(&table, &tx_id)
+        // })?;
+        // for node in internal {
+        //     if !simulate_receipts.contains_key(&node.inscription_id) {
+        //         simulate_receipts.insert(node.inscription_id.clone(), node.clone());
+        //     }
+        // }
+        // let ret = simulate_receipts.into_iter().map(|(_, v)| {
+        //     v
+        // }).collect();
+        // Ok(simulate_receipts.into_iter().map(|(_, v)| {
+        //     v
+        // }).collect())
+    }
     fn simulate_tx(&self, tx: &Transaction, wtx: &WriteTransaction, traces: Rc<RefCell<Vec<TraceNode>>>) -> crate::Result<Vec<Receipt>, SimulateError> {
         let brc20_receipts = Rc::new(RefCell::new(vec![]));
         let height = self.get_current_height()?;
