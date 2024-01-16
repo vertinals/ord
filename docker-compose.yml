@@ -1,0 +1,28 @@
+version: 'v3'
+services:
+  brc20_indexer_pending:
+    image: brc20_pending_indexer:latest
+    container_name: brc20_indexer_pending
+    network_mode: host
+    command:
+      - ord
+      - --data-dir=/root/data
+      - --regtest
+      - --first-brc20-height=0
+      - --log-level=DEBUG
+      - --rpc-url=localhost:28443
+      - --bitcoin-rpc-user=bitcoinrpc
+      - --bitcoin-rpc-pass=bitcoinrpc
+      - --simulate-zmq-url=tcp://0.0.0.0:29000
+      - --simulate-bitcoin-rpc-url=localhost:28443
+      - --simulate-bitcoin-rpc-pass=bitcoinrpc
+      - --simulate-bitcoin-rpc-user=bitcoinrpc
+      - --simulate-index=/root/simulate
+      - --enable-save-ord-receipts
+      - --enable-index-brc20 server --http-port=3888
+    environment:
+      - TX_IDS_PATH=/root/tx_ids.txt
+    volumes:
+      - ./tx_ids.txt:/root/tx_ids.txt
+      - ./simulate:/root/simulate
+      - ./data:/root/data
