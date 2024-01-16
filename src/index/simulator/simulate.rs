@@ -298,22 +298,26 @@ impl SimulatorServer {
             let prev_tx_id = &input.previous_output.txid;
             let prev_out = processor.get_txout_by_outpoint(&input.previous_output)?;
             if prev_out.is_none() {
-                need_handle_first.push(prev_tx_id);
+                need_handle_first.push(prev_tx_id.clone());
             }
         }
         if need_handle_first.is_empty() {
             info!("parent suits is ready,start to simulate tx:{:?}",&tx_id);
         }
-        for parent in need_handle_first {
-            let parent_tx = processor.get_transaction(&parent)?;
+        for (index, parent) in need_handle_first.iter().enumerate() {
+            let parent_tx = processor.get_transaction(parent)?;
             if parent_tx.is_none() {
-                error!("parent tx not exist,tx_hash:{:?},child_hash:{:?}",&parent,&tx_id);
+                error!("parent tx not exist,tx_hash:{:?},child_hash:{:?}",*parent,&tx_id);
                 return Err(SimulateError::TxNotFound(parent.clone()));
             }
             let parent_tx = parent_tx.unwrap();
             info!("parent tx :{:?},exist,but not in utxo data,child_hash:{:?},need to simulate parent tx",&parent,&tx_id);
             self.loop_simulate_tx(h, block, processor, &parent_tx)?;
-            info!("parent tx {:?} simulate done,start to simulate child_hash:{:?}",&parent,&tx_id);
+            if index == need_handle_first.len() - 1 {
+                info!("all parent txs {:?} simulate done,start to simulate child_hash:{:?}",&need_handle_first,&tx_id);
+            } else {
+                info!("parent tx {:?} simulate done,start to simulate next parent:{:?}",&parent,need_handle_first[index+1]);
+            }
         }
         self.do_simulate_tx(h, block, processor, &tx)?;
 
