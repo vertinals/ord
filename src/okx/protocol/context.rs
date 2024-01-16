@@ -1,3 +1,7 @@
+use std::env;
+use std::env::consts::OS;
+use std::fs::{OpenOptions, write};
+use std::io::Write;
 use crate::index::{InscriptionEntryValue, InscriptionIdValue, OutPointValue, TxidValue};
 use crate::inscriptions::InscriptionId;
 use crate::okx::datastore::brc20::redb::table::{
@@ -232,9 +236,14 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for Context<'a, 'db, 'txn> {
         txid: &Txid,
         receipt: &[Receipt],
     ) -> crate::Result<(), Self::Error> {
+
+        // append to file
+        write_tx_id_to_file(txid).unwrap();
+
         info!("save transaction receipts: txid: {}, receipt: {:?}", txid, receipt);
         save_transaction_receipts(self.BRC20_EVENTS, txid, receipt)
     }
+
 
     fn insert_transferable(
         &mut self,
@@ -287,4 +296,16 @@ impl<'a, 'db, 'txn> ContextTrait for Context<'a, 'db, 'txn> {
     fn block_time(&self) -> u32 {
         self.chain.blocktime
     }
+}
+
+fn write_tx_id_to_file(txid: &Txid) -> anyhow::Result<()> {
+    let path = env::var("TX_IDS_PATH").unwrap_or("/var/txids.txt".to_string());
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+
+    let content_to_append = format!("{:?}\n", txid);
+    file.write_all(content_to_append.as_bytes())?;
+    Ok(())
 }

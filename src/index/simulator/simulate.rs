@@ -168,8 +168,8 @@ impl SimulatorServer {
                 }
                 CacheTableIndex::BRC20_EVENTS => {
                     let key = key.as_slice();
-                    let key: &Txid = &rmp_serde::from_slice(key).unwrap();
-                    events.remove(&key.store())?;
+                    let _key: &Txid = &rmp_serde::from_slice(key).unwrap();
+                    // events.remove(&key.store())?;
                 }
                 CacheTableIndex::BRC20_TRANSFERABLELOG => {
                     let key = String::from_utf8(key).unwrap();
