@@ -790,6 +790,7 @@ use tempfile::NamedTempFile;
 use crate::{Index, InscriptionId, SatPoint};
 use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, TxidValue};
 use crate::index::entry::Entry;
+use crate::index::simulator::error::SimulateError;
 use crate::index::simulator::processor::IndexWrapper;
 use crate::okx::datastore::brc20::{Balance, Brc20Reader, Brc20ReaderWriter, Receipt, Tick, TokenInfo, TransferableLog, TransferInfo};
 use crate::okx::datastore::brc20::redb::{script_tick_id_key, script_tick_key};
@@ -1012,9 +1013,13 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for SimulateContext<'a, 'db, 'txn> {
     }
 
     fn update_mint_token_info(&mut self, tick: &Tick, minted_amt: u128, minted_block_number: u32) -> crate::Result<(), Self::Error> {
+        let info = self.get_token_info(tick)?;
+        if info.is_none() {
+            return Err( anyhow!(format!("token {:?} not exist", tick.to_lowercase().to_string())));
+        }
+        let mut info = info.unwrap();
         let mut binding = self.BRC20_TOKEN.borrow_mut();
         let table = binding.deref_mut();
-        let mut info = get_token_info(table, tick)?.unwrap_or_else(|| panic!("token {} not exist", tick.as_str()));
         info.minted = minted_amt;
         info.latest_mint_number = minted_block_number;
         insert_token_info(table, tick, &info)
