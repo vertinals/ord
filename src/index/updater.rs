@@ -668,7 +668,6 @@ impl<'index> Updater<'_> {
 
     height_to_block_header.insert(&self.height, &block.header.store())?;
 
-    self.height += 1;
     self.outputs_traversed += outputs_in_block;
 
     log::info!(
