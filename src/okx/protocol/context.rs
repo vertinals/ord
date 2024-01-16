@@ -30,7 +30,7 @@ use redb::Table;
 #[allow(non_snake_case)]
 pub struct Context<'a, 'db, 'txn> {
   pub(crate) chain: BlockContext,
-  pub(crate) tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
+  pub(crate) tx_out_cache: &'a SimpleLru<OutPoint, TxOut>,
   pub(crate) hit: u64,
   pub(crate) miss: u64,
   pub(crate) save_cost: u128,

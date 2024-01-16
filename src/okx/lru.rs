@@ -2,11 +2,12 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::mem;
+use std::sync::RwLock;
 
 pub struct SimpleLru<K, V> {
   cache_size: usize,
-  new_cache: HashMap<K, V>,
-  old_cache: HashMap<K, V>,
+  new_cache: RwLock<HashMap<K, V>>,
+  old_cache: RwLock<HashMap<K, V>>,
 }
 
 impl<K, V> SimpleLru<K, V>
@@ -16,20 +17,21 @@ where
   pub fn new(cache_size: usize) -> SimpleLru<K, V> {
     Self {
       cache_size,
-      new_cache: HashMap::with_capacity(cache_size),
-      old_cache: HashMap::new(),
+      new_cache: RwLock::new(HashMap::with_capacity(cache_size)),
+      old_cache: RwLock::new(HashMap::new()),
     }
   }
 
-  pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
+  pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<V>
   where
     K: Borrow<Q>,
     Q: Hash + Eq,
+    V: Clone,
   {
-    if let Some(v) = self.new_cache.get(key) {
-      Some(v)
+    if let Some(v) = self.new_cache.read().unwrap().get(key) {
+      Some(v.clone())
     } else {
-      self.old_cache.get(key)
+      self.old_cache.read().unwrap().get(key).cloned()
     }
   }
 
@@ -38,26 +40,29 @@ where
     K: Borrow<Q>,
     Q: Hash + Eq,
   {
-    if self.new_cache.contains_key(key) {
+    if self.new_cache.read().unwrap().contains_key(key) {
       true
     } else {
-      self.old_cache.contains_key(key)
+      self.old_cache.read().unwrap().contains_key(key)
     }
   }
 
-  pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-    self.new_cache.insert(key, value)
+  pub fn insert(&self, key: K, value: V) -> Option<V> {
+    self.new_cache.write().unwrap().insert(key, value)
   }
 
-  pub fn refresh(&mut self) {
-    if self.new_cache.len() >= self.cache_size {
-      self.old_cache.clear();
-      mem::swap(&mut self.new_cache, &mut self.old_cache);
+  pub fn refresh(&self) {
+    if self.new_cache.read().unwrap().len() >= self.cache_size {
+      let mut old = self.old_cache.write().unwrap();
+      old.clear();
+      let mut new = self.new_cache.write().unwrap();
+
+      mem::swap(&mut new, &mut old);
     }
   }
 
   pub fn len(&self) -> usize {
-    self.old_cache.len() + self.new_cache.len()
+    self.old_cache.read().unwrap().len() + self.new_cache.read().unwrap().len()
   }
 }
 

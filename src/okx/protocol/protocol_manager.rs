@@ -64,26 +64,59 @@ impl ProtocolManager {
     &self,
     context: &mut Context,
     block: &BlockData,
-    operations: HashMap<Txid, Vec<InscriptionOp>>,
+    mode: ExecuteMode,
   ) -> Result {
     let start = Instant::now();
 
-    // skip the coinbase transaction.
-    for (tx, txid) in block.txdata.iter() {
-      // skip coinbase transaction.
-      if tx
-        .input
-        .first()
-        .is_some_and(|tx_in| tx_in.previous_output.is_null())
-      {
-        continue;
-      }
+    let operations = match mode {
+      ExecuteMode::Sync(operations) => {
+        // skip the coinbase transaction.
+        for (tx, txid) in block.txdata.iter() {
+          // skip coinbase transaction.
+          if tx
+            .input
+            .first()
+            .is_some_and(|tx_in| tx_in.previous_output.is_null())
+          {
+            continue;
+          }
 
-      // index inscription operations.
-      if let Some(tx_operations) = operations.get(txid) {
-        self.index_tx(context, tx, txid, tx_operations)?;
+          // index inscription operations.
+          if let Some(tx_operations) = operations.get(txid) {
+            self.index_tx(context, tx, txid, tx_operations)?;
+          }
+        }
+
+        operations
       }
-    }
+      ExecuteMode::Pipeline(operation_receiver) => {
+        let mut operations = std::collections::HashMap::new();
+
+        while let Ok((tx_id, tx_operations)) = operation_receiver.recv() {
+          let (tx, _) = block
+            .txdata
+            .iter()
+            .find(|(_, txid)| &tx_id == txid)
+            .unwrap();
+
+          if tx
+            .input
+            .first()
+            .map(|tx_in| tx_in.previous_output.is_null())
+            .unwrap_or_default()
+          {
+            operations.insert(tx_id, tx_operations);
+            continue;
+          }
+
+          self.index_tx(context, tx, &tx_id, &tx_operations)?;
+
+          operations.insert(tx_id, tx_operations);
+        }
+
+        operations
+      }
+    };
 
     let bitmap_start = Instant::now();
     let mut bitmap_count = 0;
@@ -108,4 +141,9 @@ impl ProtocolManager {
     );
     Ok(())
   }
+}
+
+pub enum ExecuteMode {
+  Sync(HashMap<Txid, Vec<InscriptionOp>>),
+  Pipeline(std::sync::mpsc::Receiver<(Txid, Vec<InscriptionOp>)>),
 }

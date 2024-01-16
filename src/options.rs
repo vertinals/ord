@@ -97,6 +97,8 @@ pub struct Options {
     help = "(experimental) DB commit persist interval."
   )]
   pub(crate) commit_persist_interval: u64,
+  #[arg(long, default_value = "false", help = "Enable pipeline mode")]
+  pub(crate) enable_pipeline: bool,
 }
 
 #[derive(Debug, Clone)]

@@ -68,8 +68,9 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
   pub(super) timestamp: u32,
   pub(super) unbound_inscriptions: u64,
   pub(super) tx_out_receiver: &'a mut Receiver<TxOut>,
-  pub(super) tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
+  pub(super) tx_out_cache: &'a SimpleLru<OutPoint, TxOut>,
   pub(super) new_outpoints: Vec<OutPoint>,
+  pub(super) op_sender: Option<std::sync::mpsc::Sender<(Txid, Vec<InscriptionOp>)>>,
 }
 
 impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
@@ -95,7 +96,8 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     timestamp: u32,
     unbound_inscriptions: u64,
     tx_out_receiver: &'a mut Receiver<TxOut>,
-    tx_out_cache: &'a mut SimpleLru<OutPoint, TxOut>,
+    tx_out_cache: &'a SimpleLru<OutPoint, TxOut>,
+    op_sender: Option<std::sync::mpsc::Sender<(Txid, Vec<InscriptionOp>)>>,
   ) -> Result<Self> {
     Ok(Self {
       operations,
@@ -125,6 +127,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       tx_out_receiver,
       tx_out_cache,
       new_outpoints: vec![],
+      op_sender,
     })
   }
   pub(super) fn index_envelopes(
@@ -420,15 +423,21 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         self.update_inscription_location(input_sat_ranges, flotsam, new_satpoint)?;
       }
       self.lost_sats += self.reward - output_value;
-      Ok(())
     } else {
       self.flotsam.extend(inscriptions.map(|flotsam| Flotsam {
         offset: self.reward + flotsam.offset - output_value,
         ..flotsam
       }));
       self.reward += total_input_value - output_value;
-      Ok(())
     }
+
+    if let Some(sender) = &self.op_sender {
+      if let Some(ops) = self.operations.get(&txid) {
+        sender.send((txid, ops.clone()))?;
+      }
+    }
+
+    Ok(())
   }
 
   // write tx_out to outpoint_to_entry table
