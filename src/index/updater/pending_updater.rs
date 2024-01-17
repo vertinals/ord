@@ -255,16 +255,6 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
       }
     }
 
-    let is_coinbase = tx
-      .input
-      .first()
-      .map(|tx_in| tx_in.previous_output.is_null())
-      .unwrap_or_default();
-
-    if is_coinbase {
-      floating_inscriptions.append(&mut self.flotsam);
-    }
-
     floating_inscriptions.sort_by_key(|flotsam| flotsam.offset);
     let mut inscriptions = floating_inscriptions.into_iter().peekable();
 
@@ -294,11 +284,6 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
 
       output_value = end;
 
-      #[cfg(not(feature = "cache"))]
-      self.new_outpoints.push(OutPoint {
-        vout: vout.try_into().unwrap(),
-        txid,
-      });
       self.tx_out_cache.insert(
         OutPoint {
           vout: vout.try_into().unwrap(),
@@ -333,24 +318,15 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
       self.update_inscription_location(input_sat_ranges, flotsam, new_satpoint)?;
     }
 
-    if is_coinbase {
-      for flotsam in inscriptions {
-        let new_satpoint = SatPoint {
-          outpoint: OutPoint::null(),
-          offset: self.lost_sats + flotsam.offset - output_value,
-        };
-        self.update_inscription_location(input_sat_ranges, flotsam, new_satpoint)?;
-      }
-      self.lost_sats += self.reward - output_value;
-      Ok(())
-    } else {
-      self.flotsam.extend(inscriptions.map(|flotsam| Flotsam {
-        offset: self.reward + flotsam.offset - output_value,
-        ..flotsam
-      }));
-      self.reward += total_input_value - output_value;
-      Ok(())
+    for flotsam in inscriptions {
+      let new_satpoint = SatPoint {
+        outpoint: OutPoint::null(),
+        offset: u64::MAX,
+      };
+      self.update_inscription_location(input_sat_ranges, flotsam, new_satpoint)?;
     }
+    self.lost_sats += self.reward - output_value;
+    Ok(())
   }
 
   // write tx_out to outpoint_to_entry table
@@ -559,6 +535,11 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
     } else {
       new_satpoint.store()
     };
+    let point=if new_satpoint.outpoint.is_null() && new_satpoint.offset == u64::MAX {
+      None
+    } else {
+      Some(new_satpoint)
+    };
 
     self
       .operations
@@ -592,7 +573,7 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
           },
         },
         old_satpoint: flotsam.old_satpoint,
-        new_satpoint: Some(Entry::load(satpoint)),
+        new_satpoint: point,
       });
 
     self
