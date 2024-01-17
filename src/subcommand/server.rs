@@ -1,5 +1,4 @@
 use crate::index::simulator::simulate::{start_simulator, SimulatorServer};
-use crate::okx::datastore::brc20::Receipt;
 use bitcoincore_rpc::Auth;
 use {
   self::{
@@ -48,6 +47,7 @@ use {
   },
   utoipa::OpenApi,
 };
+use crate::index::simulator::types::ExecuteTxResponse;
 
 mod accept_encoding;
 mod accept_json;
@@ -1699,7 +1699,7 @@ impl Server {
     Extension(client): Extension<Arc<Client>>,
     Extension(simulator): Extension<Option<SimulatorServer>>,
     Path(tx_id): Path<Txid>,
-  ) -> ServerResult<Json<Vec<Receipt>>> {
+  ) -> ServerResult<Json<ExecuteTxResponse>> {
     if simulator.is_none() {
       return Err(ServerError::BadRequest("simulator not enabled".to_string()));
     }

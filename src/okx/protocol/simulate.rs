@@ -64,6 +64,7 @@ pub struct SimulateContext<'a, 'db, 'txn> {
     Rc<RefCell<Table<'db, 'txn, InscriptionIdValue, &'static [u8]>>>,
   pub traces: Rc<RefCell<Vec<TraceNode>>>,
   pub brc20_receipts: Rc<RefCell<Vec<Receipt>>>,
+  pub ord_operations: Rc<RefCell<Vec<InscriptionOp>>>,
   pub _marker_a: PhantomData<&'a ()>,
 }
 
@@ -376,6 +377,10 @@ impl<'a, 'db, 'txn> OrdReaderWriter for SimulateContext<'a, 'db, 'txn> {
       trace_type: CacheTableIndex::ORD_TX_TO_OPERATIONS,
       key,
     });
+
+    let mut ord_traces = self.ord_operations.borrow_mut();
+    ord_traces.extend_from_slice(operations);
+
     let mut table = self.ORD_TX_TO_OPERATIONS.borrow_mut();
     save_transaction_operations(&mut table, txid, operations)
   }

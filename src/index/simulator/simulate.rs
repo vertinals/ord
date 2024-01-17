@@ -2,6 +2,7 @@ use crate::height::Height;
 use crate::index::entry::Entry;
 use crate::index::simulator::error::SimulateError;
 use crate::index::simulator::processor::{IndexWrapper, StorageProcessor};
+use crate::index::simulator::types::ExecuteTxResponse;
 use crate::index::updater::pending_updater::PendingUpdater;
 use crate::index::{
   BlockData, InscriptionIdValue, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER,
@@ -15,7 +16,7 @@ use crate::index::{
 use crate::okx::datastore::brc20::redb::table::get_transaction_receipts;
 use crate::okx::datastore::brc20::{Brc20Reader, Receipt};
 use crate::okx::datastore::cache::CacheTableIndex;
-use crate::okx::datastore::ord::InscriptionOp;
+use crate::okx::datastore::ord::{InscriptionOp, OrdReader};
 use crate::okx::lru::SimpleLru;
 use crate::okx::protocol::simulate::SimulateContext;
 use crate::okx::protocol::trace::TraceNode;
@@ -215,7 +216,7 @@ impl SimulatorServer {
     &self,
     tx: &Transaction,
     commit: bool,
-  ) -> crate::Result<Vec<Receipt>, SimulateError> {
+  ) -> crate::Result<ExecuteTxResponse, SimulateError> {
     let wtx = self.simulate_index.begin_write()?;
     let traces = Rc::new(RefCell::new(vec![]));
     let ret = self.simulate_tx(tx, &wtx, traces)?;
@@ -237,8 +238,10 @@ impl SimulatorServer {
     tx: &Transaction,
     wtx: &WriteTransaction,
     traces: Rc<RefCell<Vec<TraceNode>>>,
-  ) -> crate::Result<Vec<Receipt>, SimulateError> {
+  ) -> crate::Result<ExecuteTxResponse, SimulateError> {
+    let mut ret = ExecuteTxResponse::default();
     let brc20_receipts = Rc::new(RefCell::new(vec![]));
+    let ord_operations = Rc::new(RefCell::new(vec![]));
     let height = self.get_current_height()?;
     let block = self
       .internal_index
@@ -296,13 +299,17 @@ impl SimulatorServer {
       BRC20_INSCRIBE_TRANSFER: Rc::new(RefCell::new(wtx.open_table(BRC20_INSCRIBE_TRANSFER)?)),
       traces: traces.clone(),
       brc20_receipts: brc20_receipts.clone(),
+      ord_operations: ord_operations.clone(),
       _marker_a: Default::default(),
     };
 
     let db_receipts = ctx.get_transaction_receipts(&tx.txid())?;
-    if db_receipts.len() > 0 {
+    let operations = ctx.get_transaction_operations(&tx.txid())?;
+    if db_receipts.len() > 0 || operations.len() > 0 {
+      ret.ord_operations = operations;
+      ret.brc20_receipts = db_receipts;
       info!("tx:{:?} already simulated", tx.txid());
-      return Ok(db_receipts);
+      return Ok(ret);
     }
 
     let processor = StorageProcessor {
@@ -331,8 +338,14 @@ impl SimulatorServer {
     };
 
     self.loop_simulate_tx(h, &block, &processor, &tx)?;
-    let ret = brc20_receipts.borrow();
-    let ret = ret.deref().clone();
+
+    let receipts = brc20_receipts.borrow();
+    let receipts = receipts.deref().clone();
+    let ord_operations = ord_operations.borrow();
+    let ord_operations = ord_operations.deref().clone();
+    ret.brc20_receipts = receipts;
+    ret.ord_operations = ord_operations;
+
     Ok(ret)
   }
   pub fn loop_simulate_tx(
@@ -524,7 +537,7 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
       processor.clone(),
     )?;
 
-    if processor.internal.internal.index_sats{
+    if processor.internal.internal.index_sats {
       let mut coinbase_inputs = VecDeque::new();
 
       let h = Height(height);
