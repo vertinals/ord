@@ -524,8 +524,7 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
       processor.clone(),
     )?;
 
-    let index_sats = true;
-    if index_sats {
+    if processor.internal.internal.index_sats{
       let mut coinbase_inputs = VecDeque::new();
 
       let h = Height(height);
