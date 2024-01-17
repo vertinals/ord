@@ -48,6 +48,7 @@ use {
   },
   utoipa::OpenApi,
 };
+use crate::subcommand::server::brc20::{BRC20Error, TxEvents};
 
 mod accept_encoding;
 mod accept_json;
@@ -1699,19 +1700,25 @@ impl Server {
     Extension(client): Extension<Arc<Client>>,
     Extension(simulator): Extension<Option<SimulatorServer>>,
     Path(tx_id): Path<Txid>,
-  ) -> ServerResult<Json<Vec<Receipt>>> {
+  ) -> ApiResult<TxEvents> {
     if simulator.is_none() {
-      return Err(ServerError::BadRequest("simulator not enabled".to_string()));
+
+
+      return Err( ApiError::Internal("simulator not enabled".to_string()));
     }
 
     let tx = client.get_raw_transaction(&tx_id, None);
     if tx.is_err() {
-      return Err(ServerError::BadRequest("tx not found".to_string()));
+      return Err(ApiError::NotFound("tx not found".to_string()));
     }
 
     match simulator.unwrap().execute_tx(tx.as_ref().unwrap(), false) {
-      Ok(data) => Ok(Json(data)),
-      Err(err) => Err(ServerError::BadRequest(err.to_string())),
+      Ok(data) => {
+        Ok(Json(ApiResponse::ok(TxEvents {
+          txid: tx_id.to_string(),
+          events: data.iter().map(|e| e.into()).collect(),
+        }))) },
+      Err(err) => Err(ApiError::Internal(err.to_string())),
     }
   }
 
