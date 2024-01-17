@@ -694,6 +694,7 @@ impl Index {
 
   pub(crate) fn update(&self) -> Result {
     let mut updater = Updater::new(self)?;
+    updater.load_break_point()?;
 
     loop {
       match updater.update_index() {

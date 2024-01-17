@@ -98,9 +98,9 @@ pub struct Options {
   )]
   pub(crate) commit_persist_interval: u64,
   #[clap(
-  long,
-  default_value = "0",
-  help = "ignore the blocks before <START_HEIGHT>"
+    long,
+    default_value = "0",
+    help = "ignore the blocks before <START_HEIGHT>"
   )]
   pub(crate) start_height: u32,
 }

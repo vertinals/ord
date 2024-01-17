@@ -75,7 +75,7 @@ use {
       Arc, Mutex,
     },
     thread,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
   },
   sysinfo::System,
   tempfile::TempDir,
