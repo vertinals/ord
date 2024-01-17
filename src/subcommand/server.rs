@@ -48,6 +48,9 @@ use {
   utoipa::OpenApi,
 };
 use crate::index::simulator::types::ExecuteTxResponse;
+use crate::okx::datastore::brc20::Receipt;
+use crate::okx::datastore::ord::InscriptionOp;
+use crate::subcommand::server::ord::OrdInscription;
 
 mod accept_encoding;
 mod accept_json;
@@ -422,7 +425,8 @@ impl Server {
         .route("/static/*path", get(Self::static_asset))
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
-        .route("/tx/simulate/:txid", get(Self::simulate_tx))
+        .route("/tx/simulate_ord/:txid", get(Self::simulate_ord))
+        .route("/tx/simulate_brc20/:txid", get(Self::simulate_brc20))
         .route(
           "/tx/multiple_receipt/:txid",
           get(Self::confirm_or_pending_receipt),
@@ -1695,11 +1699,11 @@ impl Server {
     Redirect::to(&destination)
   }
 
-  async fn simulate_tx(
+  async fn simulate_brc20(
     Extension(client): Extension<Arc<Client>>,
     Extension(simulator): Extension<Option<SimulatorServer>>,
     Path(tx_id): Path<Txid>,
-  ) -> ApiResult<ExecuteTxResponse> {
+  ) -> ApiResult<Vec<Receipt>> {
     if simulator.is_none() {
 
 
@@ -1713,7 +1717,30 @@ impl Server {
 
     match simulator.unwrap().execute_tx(tx.as_ref().unwrap(), false) {
       Ok(data) => {
-        Ok(Json(ApiResponse::ok(data))) },
+        Ok(Json(ApiResponse::ok(data.brc20_receipts))) },
+      Err(err) => Err(ApiError::Internal(err.to_string())),
+    }
+  }
+
+  async fn simulate_ord( Extension(client): Extension<Arc<Client>>,
+                         Extension(simulator): Extension<Option<SimulatorServer>>,
+                         Path(tx_id): Path<Txid>) -> ApiResult<Vec<InscriptionOp>> {
+    if simulator.is_none() {
+
+
+      return Err( ApiError::Internal("simulator not enabled".to_string()));
+    }
+
+    let tx = client.get_raw_transaction(&tx_id, None);
+    if tx.is_err() {
+      return Err(ApiError::NotFound("tx not found".to_string()));
+    }
+
+
+
+    match simulator.unwrap().execute_tx(tx.as_ref().unwrap(), false) {
+      Ok(data) => {
+        Ok(Json(ApiResponse::ok(data.ord_operations))) },
       Err(err) => Err(ApiError::Internal(err.to_string())),
     }
   }
