@@ -1911,6 +1911,7 @@ dependencies = [
 [[package]]
 name = "indexer-sdk"
 version = "0.1.0"
+source = "git+https://github.com/ItsFunny/indexer-sdk.git#855079394cd5331996532f7fc06377ab55dc3a82"
 dependencies = [
  "async-channel 1.9.0",
  "async-trait",
