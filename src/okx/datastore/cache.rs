@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum CacheTableIndex {
   TXID_TO_INSCRIPTION_RECEIPTS,
-
   SEQUENCE_NUMBER_TO_SATPOINT,
   SAT_TO_SEQUENCE_NUMBER,
   HOME_INSCRIPTIONS,
