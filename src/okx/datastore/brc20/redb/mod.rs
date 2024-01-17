@@ -3,7 +3,11 @@ pub mod table;
 use super::{LowerTick, ScriptKey, Tick};
 use crate::inscriptions::InscriptionId;
 
-pub fn script_tick_id_key(script: &ScriptKey, tick: &Tick, inscription_id: &InscriptionId) -> String {
+pub fn script_tick_id_key(
+  script: &ScriptKey,
+  tick: &Tick,
+  inscription_id: &InscriptionId,
+) -> String {
   format!(
     "{}_{}_{}",
     script,

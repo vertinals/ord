@@ -1,4 +1,5 @@
 use super::*;
+use crate::okx::datastore::brc20::Brc20ReaderWriter;
 use crate::{
   inscriptions::Inscription,
   okx::{
@@ -8,7 +9,6 @@ use crate::{
   Result,
 };
 use anyhow::anyhow;
-use crate::okx::datastore::brc20::Brc20ReaderWriter;
 
 impl Message {
   pub(crate) fn resolve<T>(
@@ -78,16 +78,20 @@ impl Message {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::index::{BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, ORD_TX_TO_OPERATIONS, OUTPOINT_TO_ENTRY, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY};
+  use crate::index::{
+    BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG,
+    COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, ORD_TX_TO_OPERATIONS,
+    OUTPOINT_TO_ENTRY, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY,
+  };
   use crate::okx::datastore::brc20::redb::table::insert_inscribe_transfer_inscription;
   use crate::okx::datastore::brc20::{Tick, TransferInfo};
+  use crate::okx::lru::SimpleLru;
+  use crate::okx::protocol::context::Context;
+  use crate::okx::protocol::BlockContext;
   use bitcoin::{Network, OutPoint};
   use redb::{Database, WriteTransaction};
   use std::str::FromStr;
   use tempfile::NamedTempFile;
-  use crate::okx::lru::SimpleLru;
-  use crate::okx::protocol::BlockContext;
-  use crate::okx::protocol::context::Context;
 
   fn create_inscription(str: &str) -> Inscription {
     Inscription::new(
@@ -157,26 +161,30 @@ mod tests {
     }
   }
 
-
   #[test]
   fn test_invalid_protocol() {
     let db_file = NamedTempFile::new().unwrap();
     let db = Database::create(db_file.path()).unwrap();
     let wtx = db.begin_write().unwrap();
-    let context= Context {
+    let context = Context {
       chain: BlockContext {
         network: Network::Regtest,
         blockheight: 0,
         blocktime: 0,
       },
-      tx_out_cache:&mut SimpleLru::new(10),
+      tx_out_cache: &mut SimpleLru::new(10),
       hit: 0,
       miss: 0,
       ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS).unwrap(),
-      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID).unwrap(),
+      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx
+        .open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)
+        .unwrap(),
       COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
-          .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS).unwrap(),
-      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap(),
+        .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)
+        .unwrap(),
+      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut wtx
+        .open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)
+        .unwrap(),
       OUTPOINT_TO_ENTRY: &mut wtx.open_table(OUTPOINT_TO_ENTRY).unwrap(),
       BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES).unwrap(),
       BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN).unwrap(),
@@ -195,20 +203,25 @@ mod tests {
     let db_file = NamedTempFile::new().unwrap();
     let db = Database::create(db_file.path()).unwrap();
     let wtx = db.begin_write().unwrap();
-    let context= Context {
+    let context = Context {
       chain: BlockContext {
         network: Network::Regtest,
         blockheight: 0,
         blocktime: 0,
       },
-      tx_out_cache:&mut SimpleLru::new(10),
+      tx_out_cache: &mut SimpleLru::new(10),
       hit: 0,
       miss: 0,
       ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS).unwrap(),
-      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID).unwrap(),
+      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx
+        .open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)
+        .unwrap(),
       COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
-          .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS).unwrap(),
-      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap(),
+        .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)
+        .unwrap(),
+      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut wtx
+        .open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)
+        .unwrap(),
       OUTPOINT_TO_ENTRY: &mut wtx.open_table(OUTPOINT_TO_ENTRY).unwrap(),
       BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES).unwrap(),
       BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN).unwrap(),
@@ -258,20 +271,25 @@ mod tests {
     let db_file = NamedTempFile::new().unwrap();
     let db = Database::create(db_file.path()).unwrap();
     let wtx = db.begin_write().unwrap();
-    let context= Context {
+    let context = Context {
       chain: BlockContext {
         network: Network::Regtest,
         blockheight: 0,
         blocktime: 0,
       },
-      tx_out_cache:&mut SimpleLru::new(10),
+      tx_out_cache: &mut SimpleLru::new(10),
       hit: 0,
       miss: 0,
       ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS).unwrap(),
-      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID).unwrap(),
+      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx
+        .open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)
+        .unwrap(),
       COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
-          .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS).unwrap(),
-      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap(),
+        .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)
+        .unwrap(),
+      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut wtx
+        .open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)
+        .unwrap(),
       OUTPOINT_TO_ENTRY: &mut wtx.open_table(OUTPOINT_TO_ENTRY).unwrap(),
       BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES).unwrap(),
       BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN).unwrap(),
@@ -308,20 +326,25 @@ mod tests {
     let db_file = NamedTempFile::new().unwrap();
     let db = Database::create(db_file.path()).unwrap();
     let wtx = db.begin_write().unwrap();
-    let context= Context {
+    let context = Context {
       chain: BlockContext {
         network: Network::Regtest,
         blockheight: 0,
         blocktime: 0,
       },
-      tx_out_cache:&mut SimpleLru::new(10),
+      tx_out_cache: &mut SimpleLru::new(10),
       hit: 0,
       miss: 0,
       ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS).unwrap(),
-      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID).unwrap(),
+      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx
+        .open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)
+        .unwrap(),
       COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
-          .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS).unwrap(),
-      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap(),
+        .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)
+        .unwrap(),
+      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut wtx
+        .open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)
+        .unwrap(),
       OUTPOINT_TO_ENTRY: &mut wtx.open_table(OUTPOINT_TO_ENTRY).unwrap(),
       BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES).unwrap(),
       BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN).unwrap(),
@@ -381,20 +404,25 @@ mod tests {
       sat_in_outputs: true,
     };
 
-    let context= Context {
+    let context = Context {
       chain: BlockContext {
         network: Network::Regtest,
         blockheight: 0,
         blocktime: 0,
       },
-      tx_out_cache:&mut SimpleLru::new(10),
+      tx_out_cache: &mut SimpleLru::new(10),
       hit: 0,
       miss: 0,
       ORD_TX_TO_OPERATIONS: &mut wtx.open_table(ORD_TX_TO_OPERATIONS).unwrap(),
-      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID).unwrap(),
+      COLLECTIONS_KEY_TO_INSCRIPTION_ID: &mut wtx
+        .open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)
+        .unwrap(),
       COLLECTIONS_INSCRIPTION_ID_TO_KINDS: &mut wtx
-          .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS).unwrap(),
-      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap(),
+        .open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)
+        .unwrap(),
+      SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY: &mut wtx
+        .open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)
+        .unwrap(),
       OUTPOINT_TO_ENTRY: &mut wtx.open_table(OUTPOINT_TO_ENTRY).unwrap(),
       BRC20_BALANCES: &mut wtx.open_table(BRC20_BALANCES).unwrap(),
       BRC20_TOKEN: &mut wtx.open_table(BRC20_TOKEN).unwrap(),

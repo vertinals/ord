@@ -50,9 +50,9 @@ mod reorg;
 mod rtx;
 pub(crate) mod updater;
 
+pub mod simulator;
 #[cfg(test)]
 pub(crate) mod testing;
-pub mod simulator;
 
 const SCHEMA_VERSION: u64 = 16;
 

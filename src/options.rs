@@ -90,32 +90,19 @@ pub struct Options {
   )]
   pub(crate) first_brc20_height: Option<u32>,
 
-
   #[arg(
-  long,
-  default_value = "true",
-  help = "Set lru cache to <LRU_SIZE>. By default 10000000"
+    long,
+    default_value = "true",
+    help = "Set lru cache to <LRU_SIZE>. By default 10000000"
   )]
   pub(crate) simulate_enable: bool,
-  #[arg(
-  long,
-  help = "bitcoin zmq url."
-  )]
+  #[arg(long, help = "bitcoin zmq url.")]
   pub(crate) simulate_zmq_url: Option<String>,
-  #[arg(
-  long,
-  help = "bitcoin rpc url."
-  )]
+  #[arg(long, help = "bitcoin rpc url.")]
   pub(crate) simulate_bitcoin_rpc_url: Option<String>,
-  #[arg(
-  long,
-  help = "bitcoin rpc password ."
-  )]
+  #[arg(long, help = "bitcoin rpc password .")]
   pub(crate) simulate_bitcoin_rpc_pass: Option<String>,
-  #[arg(
-  long,
-  help = "bitcoin rpc user."
-  )]
+  #[arg(long, help = "bitcoin rpc user.")]
   pub(crate) simulate_bitcoin_rpc_user: Option<String>,
   #[arg(long, help = "Simulate Use index at <INDEX>.")]
   pub(crate) simulate_index: Option<PathBuf>,

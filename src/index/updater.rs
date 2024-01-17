@@ -11,9 +11,8 @@ use {
 pub(crate) mod inscription_updater;
 use crate::okx::lru::SimpleLru;
 
-mod rune_updater;
 pub mod pending_updater;
-
+mod rune_updater;
 
 #[derive(Clone)]
 pub(crate) struct BlockData {
