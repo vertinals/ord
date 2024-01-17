@@ -11,7 +11,6 @@ pub struct PendingUpdater<'a, 'db, 'tx> {
   pub(super) blessed_inscription_count: u64,
   pub(super) chain: Chain,
   pub(super) cursed_inscription_count: u64,
-  pub(super) flotsam: Vec<Flotsam>,
   pub(super) height: u32,
   pub(super) home_inscription_count: u64,
   pub(super) index_transactions: bool,
@@ -47,7 +46,6 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
       blessed_inscription_count,
       chain,
       cursed_inscription_count,
-      flotsam: vec![],
       height,
       home_inscription_count: home_inscriptions_len,
       index_transactions,
@@ -535,11 +533,14 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
     } else {
       new_satpoint.store()
     };
+    let mut  is_transfer_to_coinbase=false;
     let point=if new_satpoint.outpoint.is_null() && new_satpoint.offset == u64::MAX {
+      is_transfer_to_coinbase=true;
       None
     } else {
       Some(new_satpoint)
     };
+
 
     self
       .operations
@@ -570,6 +571,7 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
             unbound,
             vindicated,
             inscription,
+            transfer_to_coin_base: is_transfer_to_coinbase,
           },
         },
         old_satpoint: flotsam.old_satpoint,
@@ -586,6 +588,3 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
     Ok(())
   }
 }
-
-#[test]
-pub fn test_asd() {}

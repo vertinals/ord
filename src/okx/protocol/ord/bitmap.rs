@@ -39,6 +39,7 @@ pub fn index_bitmap<T: ContextTrait>(
         unbound: _,
         vindicated: _,
         inscription,
+        transfer_to_coin_base: _,
       } => {
         if let Some((inscription_id, district)) =
           index_district(context, inscription, op.inscription_id)?

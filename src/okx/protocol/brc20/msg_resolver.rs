@@ -31,7 +31,7 @@ impl Message {
         cursed: false,
         unbound: false,
         vindicated: false,
-        inscription: _,
+        inscription: _, ..
       } if sat_in_outputs => {
         match deserialize_brc20_operation(
           new_inscriptions
@@ -89,7 +89,7 @@ mod tests {
   use crate::okx::protocol::context::Context;
   use crate::okx::protocol::BlockContext;
   use bitcoin::{Network, OutPoint};
-  use redb::{Database, WriteTransaction};
+  use redb::{Database};
   use std::str::FromStr;
   use tempfile::NamedTempFile;
 
@@ -110,6 +110,7 @@ mod tests {
         cursed: false,
         unbound: false,
         inscription: inscriptions.get(0).unwrap().clone(),
+        transfer_to_coin_base: false,
         vindicated: false,
       },
       sequence_number: 1,
@@ -238,6 +239,7 @@ mod tests {
         cursed: true,
         unbound: false,
         inscription: inscriptions.get(0).unwrap().clone(),
+        transfer_to_coin_base: false,
         vindicated: false,
       },
       ..op
@@ -249,6 +251,7 @@ mod tests {
         cursed: false,
         unbound: true,
         inscription: inscriptions.get(0).unwrap().clone(),
+        transfer_to_coin_base: false,
         vindicated: false,
       },
       ..op
@@ -259,6 +262,7 @@ mod tests {
         cursed: true,
         unbound: true,
         inscription: inscriptions.get(0).unwrap().clone(),
+        transfer_to_coin_base: false,
         vindicated: false,
       },
       ..op

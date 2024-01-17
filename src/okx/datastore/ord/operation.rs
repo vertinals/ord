@@ -24,6 +24,8 @@ pub enum Action {
     unbound: bool,
     inscription: Inscription,
     #[serde(default)]
+    transfer_to_coin_base:bool,
+    #[serde(default)]
     vindicated: bool,
   },
   Transfer,
@@ -77,6 +79,7 @@ mod tests {
         unbound: true,
         vindicated: false,
         inscription: inscription("text/plain;charset=utf-8", "foobar"),
+        transfer_to_coin_base: false,
       }
     );
 
@@ -113,6 +116,7 @@ mod tests {
           unbound: true,
           vindicated: false,
           inscription: inscription("text/plain;charset=utf-8", "foobar"),
+          transfer_to_coin_base: false,
         },
         sequence_number: 100,
         inscription_number: Some(100),

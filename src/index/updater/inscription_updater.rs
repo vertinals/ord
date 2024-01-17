@@ -636,7 +636,11 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     } else {
       new_satpoint.store()
     };
-
+    let transfer_to_coin_base=if new_satpoint.outpoint.txid==flotsam.txid{
+      false
+    }else{
+      true
+    };
     self
       .operations
       .entry(flotsam.txid)
@@ -666,6 +670,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
             unbound,
             vindicated,
             inscription,
+            transfer_to_coin_base,
           },
         },
         old_satpoint: flotsam.old_satpoint,
