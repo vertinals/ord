@@ -1,5 +1,6 @@
 use crate::okx::protocol::{context::Context, BlockContext, ProtocolConfig, ProtocolManager};
 use bitcoin::consensus::ReadExt;
+use std::io::Read;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use {
   self::{inscription_updater::InscriptionUpdater, rune_updater::RuneUpdater},
@@ -182,7 +183,7 @@ impl<'index> Updater<'_> {
 
   pub(crate) fn save_break_point(&self) -> Result {
     let mut file = File::create(self.index.options.data_dir.join("breakpoint"))?;
-    file.write_all(&self.height.to_le_bytes())?;
+    file.write_all(self.height.to_string().as_bytes())?;
     Ok(())
   }
 
@@ -190,7 +191,9 @@ impl<'index> Updater<'_> {
     let filename = self.index.options.data_dir.join("breakpoint");
     if filename.exists() {
       let mut file = File::open(filename)?;
-      self.height = file.read_u32()?;
+      let mut data = String::new();
+      file.read_to_string(&mut data)?;
+      self.height = data.parse()?;
     }
     Ok(())
   }
