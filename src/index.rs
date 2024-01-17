@@ -37,7 +37,6 @@ use {
     sync::{Mutex, Once},
   },
 };
-use crate::okx::protocol::trace::TraceNode;
 
 pub use self::entry::RuneEntry;
 pub(super) use self::entry::{
@@ -259,8 +258,11 @@ impl Index {
 
     log::info!("Setting DB cache size to {} bytes", db_cache_size);
 
-    // TODO: why none?
-    let durability = redb::Durability::Immediate;
+    let durability = if cfg!(test) {
+      redb::Durability::None
+    } else {
+      redb::Durability::Immediate
+    };
 
     let index_runes;
     let index_sats;

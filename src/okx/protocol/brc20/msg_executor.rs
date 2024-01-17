@@ -3,8 +3,6 @@ use super::{
     *,
 };
 
-use crate::okx::datastore::brc20::{Brc20Reader, Brc20ReaderWriter};
-use crate::okx::datastore::ord::OrdReader;
 use crate::{
     okx::{
         datastore::brc20::{
@@ -34,22 +32,22 @@ pub struct ExecutionMessage {
 }
 
 impl ExecutionMessage {
-    pub fn from_message<T: ContextTrait>(context: &mut T, msg: &Message, network: Network) -> Result<Self> {
+    pub fn from_message<T:ContextTrait>(context: &mut T, msg: &Message, network: Network) -> Result<Self> {
         Ok(Self {
             txid: msg.txid,
             inscription_id: msg.inscription_id,
-            inscription_number: context.get_inscription_number_by_sequence_number(msg.sequence_number).map_err(|e| {
+            inscription_number: context.get_inscription_number_by_sequence_number(msg.sequence_number).map_err(|e|{
                 anyhow!("failed to get inscription number from state! error: {e}")
             })?,
             old_satpoint: msg.old_satpoint,
             new_satpoint: msg
                 .new_satpoint
                 .ok_or(anyhow!("new satpoint cannot be None"))?,
-            from: context.get_script_key_on_satpoint(&msg.old_satpoint, network).map_err(|e| {
+            from: context.get_script_key_on_satpoint(&msg.old_satpoint, network).map_err(|e|{
                 anyhow!("failed to get script key from state! error: {e}")
             })?,
             to: if msg.sat_in_outputs {
-                Some(context.get_script_key_on_satpoint(msg.new_satpoint.as_ref().unwrap(), network).map_err(|e| {
+                Some(context.get_script_key_on_satpoint(msg.new_satpoint.as_ref().unwrap(), network).map_err(|e|{
                     anyhow!("failed to get script key from state! error: {e}")
                 })?)
             } else {
@@ -60,7 +58,7 @@ impl ExecutionMessage {
     }
 }
 
-pub fn execute<T: ContextTrait>(context: &mut T, msg: &ExecutionMessage) -> Result<Receipt> {
+pub fn execute<T:ContextTrait>(context: &mut T, msg: &ExecutionMessage) -> Result<Receipt> {
     log::debug!("BRC20 execute message: {:?}", msg);
     let event = match &msg.op {
         Operation::Deploy(deploy) => process_deploy(context, msg, deploy.clone()),
@@ -91,7 +89,7 @@ pub fn execute<T: ContextTrait>(context: &mut T, msg: &ExecutionMessage) -> Resu
     Ok(receipt)
 }
 
-fn process_deploy<T: ContextTrait>(
+fn process_deploy<T:ContextTrait>(
     context: &mut T,
     msg: &ExecutionMessage,
     deploy: Deploy,
@@ -101,10 +99,9 @@ fn process_deploy<T: ContextTrait>(
 
     let tick = deploy.tick.parse::<Tick>()?;
 
-    if let Some(stored_tick_info) = context
-        .get_token_info(&tick)
-        .map_err(|e| Error::LedgerError(anyhow!("failed")))?
-    {
+    if let Some(stored_tick_info) = context.get_token_info(&tick).map_err(|e|{
+        Error::LedgerError(anyhow!("failed to get token info from database: {}", e))
+    })? {
         return Err(Error::BRC20Error(BRC20Error::DuplicateTick(
             stored_tick_info.tick.to_string(),
         )));
@@ -158,7 +155,9 @@ fn process_deploy<T: ContextTrait>(
     };
     context
         .insert_token_info(&tick, &new_info)
-        .map_err(|e| Error::LedgerError(anyhow!("failed2")))?;
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to insert token info to database: {}", e))
+        })?;
 
     Ok(Event::Deploy(DeployEvent {
         supply,
@@ -168,7 +167,7 @@ fn process_deploy<T: ContextTrait>(
     }))
 }
 
-fn process_mint<T: ContextTrait>(context: &mut T, msg: &ExecutionMessage, mint: Mint) -> Result<Event, Error> {
+fn process_mint<T:ContextTrait>(context: &mut T, msg: &ExecutionMessage, mint: Mint) -> Result<Event, Error> {
     // ignore inscribe inscription to coinbase.
     let to_script_key = msg.to.clone().ok_or(BRC20Error::InscribeToCoinbase)?;
 
@@ -176,7 +175,9 @@ fn process_mint<T: ContextTrait>(context: &mut T, msg: &ExecutionMessage, mint: 
 
     let token_info = context
         .get_token_info(&tick)
-        .map_err(|e| Error::LedgerError(anyhow!("failed3")))?
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to get token info from database: {}", e))
+        })?
         .ok_or(BRC20Error::TickNotFound(tick.to_string()))?;
 
     let base = BIGDECIMAL_TEN.checked_powu(u64::from(token_info.decimal))?;
@@ -223,7 +224,9 @@ fn process_mint<T: ContextTrait>(context: &mut T, msg: &ExecutionMessage, mint: 
     // get or initialize user balance.
     let mut balance = context
         .get_balance(&to_script_key, &tick)
-        .map_err(|e| Error::LedgerError(anyhow!("failed4")))?
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to get balance from database: {}", e))
+        })?
         .map_or(Balance::new(&tick), |v| v);
 
     // add amount to available balance.
@@ -234,13 +237,17 @@ fn process_mint<T: ContextTrait>(context: &mut T, msg: &ExecutionMessage, mint: 
     // store to database.
     context
         .update_token_balance(&to_script_key, balance)
-        .map_err(|e| Error::LedgerError(anyhow!("failed5")))?;
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to update balance to database: {}", e))
+        })?;
 
     // update token minted.
     let minted = minted.checked_add(&amt)?.checked_to_u128()?;
     context
         .update_mint_token_info(&tick, minted, context.block_height())
-        .map_err(|e| Error::LedgerError(anyhow!("failed6")))?;
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to update minted to database: {}", e))
+        })?;
 
     Ok(Event::Mint(MintEvent {
         tick: token_info.tick,
@@ -261,7 +268,9 @@ fn process_inscribe_transfer<T:ContextTrait>(
 
     let token_info = context
         .get_token_info(&tick)
-        .map_err(|e| Error::LedgerError(anyhow!("failed7")))?
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to get token info from database: {}", e))
+        })?
         .ok_or(BRC20Error::TickNotFound(tick.to_string()))?;
 
     let base = BIGDECIMAL_TEN.checked_powu(u64::from(token_info.decimal))?;
@@ -283,7 +292,9 @@ fn process_inscribe_transfer<T:ContextTrait>(
 
     let mut balance = context
         .get_balance(&to_script_key, &tick)
-        .map_err(|e| Error::LedgerError(anyhow!("failed8")))?
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to get balance from database: {}", e))
+        })?
         .map_or(Balance::new(&tick), |v| v);
 
     let overall = Into::<Num>::into(balance.overall_balance);
@@ -301,7 +312,9 @@ fn process_inscribe_transfer<T:ContextTrait>(
     let amt = amt.checked_to_u128()?;
     context
         .update_token_balance(&to_script_key, balance)
-        .map_err(|e| Error::LedgerError(anyhow!("failed9")))?;
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to update balance to database: {}", e))
+        })?;
 
     let inscription = TransferableLog {
         inscription_id: msg.inscription_id,
@@ -313,7 +326,9 @@ fn process_inscribe_transfer<T:ContextTrait>(
 
     context
         .insert_transferable(&inscription.owner, &tick, &inscription)
-        .map_err(|e| Error::LedgerError(anyhow!("failed10")))?;
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to insert transferable to database: {}", e))
+        })?;
 
     context
         .insert_inscribe_transfer_inscription(
@@ -323,7 +338,9 @@ fn process_inscribe_transfer<T:ContextTrait>(
                 amt,
             },
         )
-        .map_err(|e| Error::LedgerError(anyhow!("failed10")))?;
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to insert inscribe transfer inscription to database: {}", e))
+        })?;
 
     Ok(Event::InscribeTransfer(InscripbeTransferEvent {
         tick: inscription.tick,
@@ -334,7 +351,9 @@ fn process_inscribe_transfer<T:ContextTrait>(
 fn process_transfer<T:ContextTrait>(context: &mut T, msg: &ExecutionMessage) -> Result<Event, Error> {
     let transferable = context
         .get_transferable_by_id(&msg.from, &msg.inscription_id)
-        .map_err(|e| Error::LedgerError(anyhow!("failed10")))?
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to get transferable from database: {}", e))
+        })?
         .ok_or(BRC20Error::TransferableNotFound(msg.inscription_id))?;
 
     let amt = Into::<Num>::into(transferable.amount);
@@ -349,13 +368,17 @@ fn process_transfer<T:ContextTrait>(context: &mut T, msg: &ExecutionMessage) -> 
 
     let token_info = context
         .get_token_info(&tick)
-        .map_err(|e| Error::LedgerError(anyhow!("failed10")))?
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to get token info from database: {}", e))
+        })?
         .ok_or(BRC20Error::TickNotFound(tick.to_string()))?;
 
     // update from key balance.
     let mut from_balance = context
         .get_balance(&msg.from, &tick)
-        .map_err(|e| Error::LedgerError(anyhow!("failed10")))?
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to get balance from database: {}", e))
+        })?
         .map_or(Balance::new(&tick), |v| v);
 
     let from_overall = Into::<Num>::into(from_balance.overall_balance);
@@ -369,7 +392,9 @@ fn process_transfer<T:ContextTrait>(context: &mut T, msg: &ExecutionMessage) -> 
 
     context
         .update_token_balance(&msg.from, from_balance)
-        .map_err(|e| Error::LedgerError(anyhow!("failed10")))?;
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to update balance to database: {}", e))
+        })?;
 
     // redirect receiver to sender if transfer to conibase.
     let mut out_msg = None;
@@ -385,7 +410,9 @@ fn process_transfer<T:ContextTrait>(context: &mut T, msg: &ExecutionMessage) -> 
     // update to key balance.
     let mut to_balance = context
         .get_balance(&to_script_key, &tick)
-        .map_err(|e| Error::LedgerError(anyhow!("failed10")))?
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to get balance from database: {}", e))
+        })?
         .map_or(Balance::new(&tick), |v| v);
 
     let to_overall = Into::<Num>::into(to_balance.overall_balance);
@@ -393,15 +420,21 @@ fn process_transfer<T:ContextTrait>(context: &mut T, msg: &ExecutionMessage) -> 
 
     context
         .update_token_balance(&to_script_key, to_balance)
-        .map_err(|e| Error::LedgerError(anyhow!("failed10")))?;
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to update balance to database: {}", e))
+        })?;
 
     context
         .remove_transferable(&msg.from, &tick, &msg.inscription_id)
-        .map_err(|e| Error::LedgerError(anyhow!("failed10")))?;
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to remove transferable from database: {}", e))
+        })?;
 
     context
         .remove_inscribe_transfer_inscription(&msg.inscription_id)
-        .map_err(|e| Error::LedgerError(anyhow!("failed10")))?;
+        .map_err(|e|{
+            Error::LedgerError(anyhow!("failed to remove inscribe transfer inscription from database: {}", e))
+        })?;
 
     Ok(Event::Transfer(TransferEvent {
         msg: out_msg,

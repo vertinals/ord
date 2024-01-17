@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -13,29 +13,27 @@ use indexer_sdk::client::drect::DirectClient;
 use indexer_sdk::client::event::ClientEvent;
 use indexer_sdk::client::{SyncClient};
 use indexer_sdk::configuration::base::{IndexerConfiguration, NetConfiguration, ZMQConfiguration};
-use indexer_sdk::factory::common::{async_create_and_start_processor, sync_create_and_start_processor};
+use indexer_sdk::factory::common::{sync_create_and_start_processor};
 use indexer_sdk::storage::db::memory::MemoryDB;
 use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
 use indexer_sdk::wait_exit_signal;
 use log::{error, info};
 use redb::{Database, ReadableTable, RedbValue, WriteTransaction};
-use tempfile::NamedTempFile;
 use tokio::runtime::Runtime;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use crate::{Index, InscriptionId, Options, Sat, SatPoint};
+use crate::{Index, Options, Sat, SatPoint};
 use crate::height::Height;
-use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, InscriptionIdValue, ORD_TX_TO_OPERATIONS, OUTPOINT_TO_ENTRY, OUTPOINT_TO_SAT_RANGES, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_SATPOINT, SIMULATE_TRACE_TABLE, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION, TxidValue};
+use crate::index::{BlockData, BRC20_BALANCES, BRC20_EVENTS, BRC20_INSCRIBE_TRANSFER, BRC20_TOKEN, BRC20_TRANSFERABLELOG, COLLECTIONS_INSCRIPTION_ID_TO_KINDS, COLLECTIONS_KEY_TO_INSCRIPTION_ID, HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, InscriptionIdValue, ORD_TX_TO_OPERATIONS, OUTPOINT_TO_ENTRY, OUTPOINT_TO_SAT_RANGES, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_SATPOINT, SIMULATE_TRACE_TABLE, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION};
 use crate::index::entry::Entry;
 use crate::index::simulator::error::SimulateError;
 use crate::index::simulator::processor::{IndexWrapper, StorageProcessor};
 use crate::index::updater::pending_updater::PendingUpdater;
-use crate::okx::datastore::brc20::{Brc20Reader, Receipt, Tick};
+use crate::okx::datastore::brc20::{Brc20Reader, Receipt};
 use crate::okx::datastore::brc20::redb::table::get_transaction_receipts;
 use crate::okx::datastore::cache::CacheTableIndex;
 use crate::okx::datastore::ord::InscriptionOp;
-use crate::okx::datastore::ScriptKey;
 use crate::okx::lru::SimpleLru;
 use crate::okx::protocol::{ProtocolConfig, ProtocolManager};
 use crate::okx::protocol::simulate::SimulateContext;
@@ -118,7 +116,7 @@ impl SimulatorServer {
         Ok(())
     }
     fn remove_tx_traces(&self, txid: &Txid) -> crate::Result<()> {
-        let mut wtx = self.simulate_index.begin_write()?;
+        let wtx = self.simulate_index.begin_write()?;
         let commit = self.do_remove_traces(txid, &wtx)?;
         if commit {
             wtx.commit()?;
@@ -200,7 +198,7 @@ impl SimulatorServer {
         Ok(ret)
     }
     pub fn execute_tx(&self, tx: &Transaction, commit: bool) -> crate::Result<Vec<Receipt>, SimulateError> {
-        let mut wtx = self.simulate_index.begin_write()?;
+        let wtx = self.simulate_index.begin_write()?;
         let traces = Rc::new(RefCell::new(vec![]));
         let ret = self.simulate_tx(tx, &wtx, traces)?;
         if commit {
@@ -210,28 +208,11 @@ impl SimulatorServer {
         Ok(ret)
     }
 
-    pub fn get_receipt(&self,tx_id: Txid) -> Result<Vec<Receipt>,anyhow::Error> {
+    pub fn get_receipt(&self, tx_id: Txid) -> Result<Vec<Receipt>, anyhow::Error> {
         let rx = self.simulate_index.begin_read()?;
         let tab = rx.open_table(BRC20_EVENTS)?;
         let ret = get_transaction_receipts(&tab, &tx_id)?;
         Ok(ret)
-        // let mut simulate_receipts = ret.into_iter().map(|v| {
-        //     (v.inscription_id.clone(), v)
-        // }).collect::<HashMap<InscriptionId, Receipt>>();
-        // let internal = self.internal_index.use_internal_table(BRC20_EVENTS, |table| {
-        //     get_transaction_receipts(&table, &tx_id)
-        // })?;
-        // for node in internal {
-        //     if !simulate_receipts.contains_key(&node.inscription_id) {
-        //         simulate_receipts.insert(node.inscription_id.clone(), node.clone());
-        //     }
-        // }
-        // let ret = simulate_receipts.into_iter().map(|(_, v)| {
-        //     v
-        // }).collect();
-        // Ok(simulate_receipts.into_iter().map(|(_, v)| {
-        //     v
-        // }).collect())
     }
     fn simulate_tx(&self, tx: &Transaction, wtx: &WriteTransaction, traces: Rc<RefCell<Vec<TraceNode>>>) -> crate::Result<Vec<Receipt>, SimulateError> {
         let brc20_receipts = Rc::new(RefCell::new(vec![]));
@@ -245,12 +226,12 @@ impl SimulatorServer {
         let sat_to_sequence_number = wtx.open_multimap_table(SAT_TO_SEQUENCE_NUMBER).unwrap();
         let satpoint_to_sequence_number = wtx.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER).unwrap();
         let sequence_number_to_children = wtx.open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN).unwrap();
-        let mut sequence_number_to_inscription_entry =
+        let sequence_number_to_inscription_entry =
             Rc::new(RefCell::new(wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY).unwrap()));
         let sequence_number_to_satpoint = wtx.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
         let transaction_id_to_transaction = wtx.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
         let outpoint_to_entry = Rc::new(RefCell::new(wtx.open_table(OUTPOINT_TO_ENTRY).unwrap()));
-        let OUTPOINT_TO_SAT_RANGES_table = wtx.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
+        let outpoint_to_sat_ranges = wtx.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
         let sat_to_point = wtx.open_table(SAT_TO_SATPOINT).unwrap();
         let statis_to_count = wtx.open_table(STATISTIC_TO_COUNT).unwrap();
         let traces_table = wtx.open_table(SIMULATE_TRACE_TABLE)?;
@@ -297,7 +278,7 @@ impl SimulatorServer {
             sequence_number_to_children: Rc::new(RefCell::new(sequence_number_to_children)),
             sequence_number_to_satpoint: Rc::new(RefCell::new(sequence_number_to_satpoint)),
             sequence_number_to_inscription_entry,
-            outpoint_to_sat_ranges: Rc::new(RefCell::new(OUTPOINT_TO_SAT_RANGES_table)),
+            outpoint_to_sat_ranges: Rc::new(RefCell::new(outpoint_to_sat_ranges)),
             sat_to_satpoint: Rc::new(RefCell::new(sat_to_point)),
             statistic_to_count: Rc::new(RefCell::new(statis_to_count)),
             trace_table: Rc::new(RefCell::new(traces_table)),
@@ -645,24 +626,12 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
-    use std::thread::sleep;
     use bitcoincore_rpc::RpcApi;
     use indexer_sdk::factory::common::new_client_for_test;
     use log::LevelFilter;
     use super::*;
 
-    // #[test]
-    // pub fn test_start() {
-    //     env_logger::builder()
-    //         .filter_level(LevelFilter::Debug)
-    //         .format_target(false)
-    //         .init();
-    //     let opt = create_options();
-    //     let internal = Arc::new(Index::open(&opt).unwrap());
-    //     let server = start_simulator(opt, internal.clone());
-    //     sleep(std::time::Duration::from_secs(5))
-    // }
-
+    #[ignore]
     #[test]
     pub fn test_simulate_tx() {
         env_logger::builder()

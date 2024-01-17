@@ -16,7 +16,6 @@ use crate::{Index, InscriptionId, SatPoint};
 use crate::index::entry::{Entry, SatPointValue};
 use crate::index::{HOME_INSCRIPTIONS, INSCRIPTION_ID_TO_SEQUENCE_NUMBER, InscriptionEntryValue, InscriptionIdValue, OUTPOINT_TO_ENTRY, OutPointValue, SATPOINT_TO_SEQUENCE_NUMBER, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, Statistic, STATISTIC_TO_COUNT, TxidValue};
 use crate::okx::datastore::ord::redb::table::get_txout_by_outpoint;
-use crate::okx::protocol::context::Context;
 use crate::okx::protocol::simulate::SimulateContext;
 use crate::okx::protocol::trace::TraceNode;
 

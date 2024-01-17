@@ -23,7 +23,4 @@ pub enum SimulateError {
 
     #[error("transaction failed: {0}")]
     TransactionError(#[from] redb::TransactionError),
-
-    #[error("msg error: {0}")]
-    MsgError(String)
 }

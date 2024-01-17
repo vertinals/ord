@@ -10,7 +10,6 @@
   clippy::cast_sign_loss
 )]
 
-extern crate core;
 
 use {
   self::{

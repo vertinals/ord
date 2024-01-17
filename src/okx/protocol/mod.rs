@@ -8,7 +8,6 @@ pub(crate) mod resolve_manager;
 pub mod simulate;
 pub mod trace;
 
-use redb::ReadableTable;
 pub use self::protocol_manager::ProtocolManager;
 
 use {
@@ -16,7 +15,7 @@ use {
     crate::Options,
     bitcoin::Network,
 };
-use crate::okx::datastore::brc20::{Brc20ReaderWriter, TransferInfo};
+use crate::okx::datastore::brc20::{Brc20ReaderWriter};
 use crate::okx::datastore::ord::OrdReaderWriter;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

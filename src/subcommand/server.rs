@@ -1,5 +1,4 @@
 use bitcoincore_rpc::Auth;
-use log::info;
 use {
   self::{
     accept_encoding::AcceptEncoding,
@@ -47,9 +46,8 @@ use {
   },
   utoipa::OpenApi,
 };
-use crate::index::simulator::simulate::{Simulator, SimulatorServer, start_simulator};
+use crate::index::simulator::simulate::{SimulatorServer, start_simulator};
 use crate::okx::datastore::brc20::Receipt;
-use crate::okx::datastore::brc20::redb::table::get_transaction_receipts;
 
 mod accept_encoding;
 mod accept_json;

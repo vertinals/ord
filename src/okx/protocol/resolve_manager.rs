@@ -1,5 +1,4 @@
 use crate::inscriptions::ParsedEnvelope;
-use crate::okx::protocol::context::Context;
 use {
     super::*,
     crate::{
