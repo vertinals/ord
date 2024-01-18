@@ -1,5 +1,6 @@
 use crate::okx::protocol::{context::Context, BlockContext, ProtocolConfig, ProtocolManager};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use once_cell::sync::Lazy;
 use {
   self::{inscription_updater::InscriptionUpdater, rune_updater::RuneUpdater},
   super::{fetcher::Fetcher, *},
@@ -35,6 +36,10 @@ impl From<Block> for BlockData {
     }
   }
 }
+
+
+
+pub static mut LATEST_HEIGHT: Lazy<u64> = Lazy::new(|| 0);
 
 pub(crate) struct Updater<'index> {
   range_cache: HashMap<OutPointValue, Vec<u8>>,
@@ -95,6 +100,13 @@ impl<'index> Updater<'_> {
     let mut uncommitted = 0;
     let mut tx_out_cache = SimpleLru::new(self.index.options.lru_size);
     while let Ok(block) = rx.recv() {
+
+      let latest_height = self.index.client.get_block_count()?;
+
+      unsafe {
+         *LATEST_HEIGHT = latest_height;
+      }
+
       tx_out_cache.refresh();
       self.index_block(
         self.index,
@@ -119,7 +131,7 @@ impl<'index> Updater<'_> {
 
       uncommitted += 1;
 
-      if uncommitted == 200 {
+      if uncommitted == 1 {
         self.commit(wtx)?;
         uncommitted = 0;
         wtx = self.index.begin_write()?;
