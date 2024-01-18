@@ -1737,7 +1737,7 @@ impl Server {
 }
 
 #[derive(Serialize, Deserialize)]
-struct MultipleReceipt {
+pub struct MultipleReceipt {
   pub confirm: Option<Vec<crate::okx::datastore::brc20::Receipt>>,
   pub pending: Option<Vec<crate::okx::datastore::brc20::Receipt>>,
 }

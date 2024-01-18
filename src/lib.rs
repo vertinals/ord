@@ -140,6 +140,7 @@ mod server_config;
 pub mod subcommand;
 mod tally;
 pub mod templates;
+pub use crate::okx::datastore::brc20::Receipt;
 
 type Result<T = (), E = Error> = std::result::Result<T, E>;
 
