@@ -73,6 +73,8 @@ fn check(tx_id: &str, url: &String) -> anyhow::Result<(bool, bool)> {
             println!("{} pending empty", tx_id);
             return Ok((false, false));
         }
+
+        println!("{} confirm len: {}, pending len: {}", tx_id, receipt.confirm.len(), receipt.pending.len());
         if receipt.confirm.len() < receipt.pending.len() {
             println!("{} right", tx_id);
             return Ok((true, true));
