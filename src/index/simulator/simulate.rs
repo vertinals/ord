@@ -20,7 +20,7 @@ use crate::okx::lru::SimpleLru;
 use crate::okx::protocol::simulate::SimulateContext;
 use crate::okx::protocol::trace::TraceNode;
 use crate::okx::protocol::{ProtocolConfig, ProtocolManager};
-use crate::{Index, Options, Sat, SatPoint};
+use crate::{Index, Options, Sat, SatPoint, SHUTTING_DOWN};
 use anyhow::anyhow;
 use bitcoin::{Block, OutPoint, Transaction, TxOut, Txid};
 use indexer_sdk::client::drect::DirectClient;
@@ -41,7 +41,7 @@ use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, atomic};
 use std::thread;
 use tokio::runtime::Runtime;
 use tokio::sync::watch;
@@ -76,7 +76,10 @@ impl SimulatorServer {
   }
   async fn on_start(self, mut exit: watch::Receiver<()>) {
     loop {
-      tokio::select! {
+        if SHUTTING_DOWN.load(atomic::Ordering::Relaxed) {
+            break;
+        }
+        tokio::select! {
           event=self.get_client_event()=>{
               match event{
                  Ok(event) => {
