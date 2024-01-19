@@ -21,10 +21,11 @@ fn main() {
 
     let tx_ids: Vec<&str> = data.split('\n').collect();
     let mut hit = 0;
-    let total = tx_ids.len();
+    let mut total = tx_ids.len();
     for id in tx_ids {
         if id.len() != 66 {
             println!("{} is invalid tx_id", id);
+            total -= 1;
             continue
         }
         match check(&id[2..], rpc_url) {
@@ -40,7 +41,7 @@ fn main() {
 
     }
 
-    let percent = total as f32 / total as f32 * 100f32;
+    let percent = hit as f32 / total as f32 * 100f32;
 
     println!("hit ratio: {:.2} %",percent)
 }
