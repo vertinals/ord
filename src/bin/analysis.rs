@@ -1,5 +1,7 @@
 use std::env;
-use std::fs::read_to_string;
+use std::fs::{OpenOptions, read_to_string};
+use std::io::Write;
+use bitcoin::Txid;
 use reqwest::blocking;
 
 use serde::{Deserialize, Serialize};
@@ -19,52 +21,62 @@ fn main() {
 
     let data = read_to_string(tx_id_file).unwrap();
 
-    let tx_ids: Vec<&str> = data.split('\n').collect();
+    let tx_ids: Vec<&str> = data.split('\n').filter(|x|x.len() > 0).collect();
     let mut hit = 0;
+    let mut right = 0;
+    let mut sum = 0;
     let mut total = tx_ids.len();
     for id in tx_ids {
         if id.len() != 66 {
             println!("{} is invalid tx_id", id);
             total -= 1;
-            continue
+            continue;
         }
         match check(&id[2..], rpc_url) {
             Ok(ret) => {
-                if ret {
-                    hit += 1;
-                }else {
-                    println!("{} is different",id)
+                sum += 1;
+                if ret.0 {
+                    right += 1
+                } else {
+                    write_tx_id_to_file(id);
+                }
+
+                if ret.1 {
+                    hit += 1
                 }
             }
             Err(_) => {}
         }
-
     }
 
     let percent = hit as f32 / total as f32 * 100f32;
 
-    println!("hit ratio: {:.2} %",percent)
+    println!("hit ratio: {:.2} %", percent);
+
+    let correct_percebt = right as f32 /  sum as f32 * 100f32;
+
+    println!("correct ratio: {:.2} %", correct_percebt);
 }
 
-fn check(tx_id: &str, url: &String) -> anyhow::Result<bool> {
+fn check(tx_id: &str, url: &String) -> anyhow::Result<(bool, bool)> {
     let url = format!("{}/{}", url, tx_id);
     let response = blocking::get(url)?;
 
     if response.status().is_success() {
         let receipt = response.json::<MultipleReceipt>().unwrap();
+        if receipt.pending.len() == 0 {
+            return Ok((false, false));
+        }
         if receipt.confirm.len() != receipt.pending.len() {
-            return Ok(false);
+            return Ok((false, true));
         }
 
-        if receipt.confirm.len() > 0 {
-            let receip1 = &receipt.confirm[0];
-            let receip2 = &receipt.pending[0];
-            return Ok(equal(receip1, receip2));
-        }
 
-        return Ok(true);
+        let receip1 = &receipt.confirm[0];
+        let receip2 = &receipt.pending[0];
+        return Ok((equal(receip1, receip2), true));
     }
-    return Ok(false);
+    return Ok((false,false));
 }
 
 
@@ -81,4 +93,16 @@ fn equal(receipt: &Receipt, receipt2: &Receipt) -> bool {
         receipt.from == receipt2.from &&
         receipt.to == receipt2.to &&
         receipt.result == receipt2.result;
+}
+
+fn write_tx_id_to_file(txid: &str) -> anyhow::Result<()> {
+    let path = "err_txids.txt";
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+
+    let content_to_append = format!("{}\n", txid);
+    file.write_all(content_to_append.as_bytes())?;
+    Ok(())
 }
