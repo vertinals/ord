@@ -66,10 +66,12 @@ fn check(tx_id: &str, url: &String) -> anyhow::Result<(bool, bool)> {
     if response.status().is_success() {
         let receipt = response.json::<MultipleReceipt>().unwrap();
         if receipt.pending.len() == 0 {
+            println!("{} pending empty", tx_id);
             return Ok((false, false));
         }
-        if receipt.confirm.len() != receipt.pending.len() {
-            return Ok((false, true));
+        if receipt.confirm.len() < receipt.pending.len() {
+            println!("{} right", tx_id);
+            return Ok((true, true));
         }
 
 
