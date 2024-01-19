@@ -38,7 +38,7 @@ impl CallManager {
 
 
     unsafe {
-      if *LATEST_HEIGHT - 1 <=  context.block_height() as u64 {
+      if *LATEST_HEIGHT  <=  (context.block_height() + 1) as u64 {
         // append to file
         write_tx_id_to_file(txid).unwrap();
         info!("save transaction receipts: txid: {}", txid);
