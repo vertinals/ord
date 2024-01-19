@@ -476,31 +476,28 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
         .map(|(_, txid)| txid)
         .collect::<HashSet<_>>();
       use rayon::prelude::*;
-      let tx_outs = block
-        .txdata
-        .par_iter()
-        .flat_map(|(tx, _)| tx.input.par_iter())
-        .filter_map(|input| {
+      let mut tx_outs = Vec::new();
+      for (tx, _) in block.txdata.iter() {
+        for input in tx.input.iter() {
           total_outputs_count.fetch_add(1, Ordering::Relaxed);
           let prev_output = input.previous_output;
-          // We don't need coinbase input value
           if prev_output.is_null() {
-            None
+            continue;
           } else if txids.contains(&prev_output.txid) {
             meet_outputs_count.fetch_add(1, Ordering::Relaxed);
-            None
+            continue;
           } else if tx_out_cache.contains(&prev_output) {
             cache_outputs_count.fetch_add(1, Ordering::Relaxed);
-            None
+            continue;
           } else if let Some(txout) = processor.get_txout_by_outpoint(&prev_output).unwrap() {
             miss_outputs_count.fetch_add(1, Ordering::Relaxed);
-            Some((prev_output, Some(txout)))
+            tx_outs.push((prev_output, Some(txout)));
           } else {
             fetching_outputs_count.fetch_add(1, Ordering::Relaxed);
-            Some((prev_output, None))
+            tx_outs.push((prev_output, None));
           }
-        })
-        .collect::<Vec<_>>();
+        }
+      }
       for (out_point, value) in tx_outs.into_iter() {
         if let Some(tx_out) = value {
           tx_out_cache.insert(out_point, tx_out);
