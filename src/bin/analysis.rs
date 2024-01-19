@@ -79,6 +79,7 @@ fn check(tx_id: &str, url: &String) -> anyhow::Result<(bool, bool)> {
         let receip2 = &receipt.pending[0];
         return Ok((equal(receip1, receip2), true));
     }
+    println!("{} query error", tx_id);
     return Ok((false,false));
 }
 
