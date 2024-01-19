@@ -36,7 +36,8 @@ fn main() {
             Ok(ret) => {
                 sum += 1;
                 if ret.0 {
-                    right += 1
+                    right += 1;
+                    println!("{}",id)
                 } else {
                     write_tx_id_to_file(id);
                 }
