@@ -10,7 +10,7 @@ use crate::index::{
   INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER, ORD_TX_TO_OPERATIONS, OUTPOINT_TO_ENTRY,
   OUTPOINT_TO_SAT_RANGES, SATPOINT_TO_SEQUENCE_NUMBER, SAT_TO_SATPOINT, SAT_TO_SEQUENCE_NUMBER,
   SEQUENCE_NUMBER_TO_CHILDREN, SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY, SEQUENCE_NUMBER_TO_SATPOINT,
-  SIMULATE_TRACE_TABLE, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION,
+  SIMULATE_TRACE_TABLE, SIMULATE_TX_FLAG, STATISTIC_TO_COUNT, TRANSACTION_ID_TO_TRANSACTION,
 };
 use crate::okx::datastore::brc20::redb::table::get_transaction_receipts;
 use crate::okx::datastore::brc20::{Brc20Reader, Receipt};
@@ -41,7 +41,7 @@ use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, atomic};
+use std::sync::{atomic, Arc};
 use std::thread;
 use tokio::runtime::Runtime;
 use tokio::sync::watch;
@@ -76,10 +76,10 @@ impl SimulatorServer {
   }
   async fn on_start(self, mut exit: watch::Receiver<()>) {
     loop {
-        if SHUTTING_DOWN.load(atomic::Ordering::Relaxed) {
-            break;
-        }
-        tokio::select! {
+      if SHUTTING_DOWN.load(atomic::Ordering::Relaxed) {
+        break;
+      }
+      tokio::select! {
           event=self.get_client_event()=>{
               match event{
                  Ok(event) => {
@@ -146,79 +146,85 @@ impl SimulatorServer {
       return Ok(false);
     }
 
-        let mut brc20_balances = wtx.open_table(BRC20_BALANCES)?;
-        let mut brc20_token = wtx.open_table(BRC20_TOKEN)?;
-        let mut events = wtx.open_table(BRC20_EVENTS)?;
-        let mut brc20_transferlog = wtx.open_table(BRC20_TRANSFERABLELOG)?;
-        let mut brc20_inscribe_transfer = wtx.open_table(BRC20_INSCRIBE_TRANSFER)?;
-        let mut ord_tx_id_to_operations = wtx.open_table(ORD_TX_TO_OPERATIONS)?;
-        let mut collections_key_to_inscription_id = wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?;
-        let mut collection_inscription_id_to_kinds = wtx.open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?;
-        let binding = traces.unwrap();
-        let traces = binding.value();
-        let traces: Vec<TraceNode> = rmp_serde::from_slice(traces)?;
-        for node in traces {
-            let key = node.key;
-            match node.trace_type {
-                CacheTableIndex::TXID_TO_INSCRIPTION_RECEIPTS => {}
-                CacheTableIndex::SEQUENCE_NUMBER_TO_SATPOINT => {}
-                CacheTableIndex::SAT_TO_SEQUENCE_NUMBER => {}
-                CacheTableIndex::HOME_INSCRIPTIONS => {}
-                CacheTableIndex::INSCRIPTION_ID_TO_SEQUENCE_NUMBER => {}
-                CacheTableIndex::SEQUENCE_NUMBER_TO_CHILDREN => {}
-                CacheTableIndex::SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY => {}
-                CacheTableIndex::INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER => {}
-                CacheTableIndex::OUTPOINT_TO_ENTRY => {}
-                CacheTableIndex::BRC20_BALANCES => {
-                    let key = String::from_utf8(key).unwrap();
-                    let key = key.as_str();
-                    brc20_balances.remove(key)?;
-                }
-                CacheTableIndex::BRC20_TOKEN => {
-                    let key = String::from_utf8(key).unwrap();
-                    let key = key.as_str();
-                    brc20_token.remove(key)?;
-                }
-                CacheTableIndex::BRC20_EVENTS => {
-                    let key = key.as_slice();
-                    let _key: &Txid = &rmp_serde::from_slice(key).unwrap();
-                    // events.remove(&key.store())?;
-                }
-                CacheTableIndex::BRC20_TRANSFERABLELOG => {
-                    let key = String::from_utf8(key).unwrap();
-                    brc20_transferlog.remove(key.as_str())?;
-                }
-                CacheTableIndex::BRC20_INSCRIBE_TRANSFER => {
-                    let key = InscriptionIdValue::from_bytes(key.as_slice());
-                    brc20_inscribe_transfer.remove(&key)?;
-                }
-                CacheTableIndex::ORD_TX_TO_OPERATIONS => {
-                    let key: [u8; 32] = key.as_slice().try_into().unwrap();
-                    ord_tx_id_to_operations.remove(&key)?;
-                }
-                CacheTableIndex::COLLECTIONS_KEY_TO_INSCRIPTION_ID => {
-                    let key = String::from_utf8(key).unwrap();
-                    collections_key_to_inscription_id.remove(key.as_str())?;
-                }
-                CacheTableIndex::COLLECTIONS_INSCRIPTION_ID_TO_KINDS => {
-                    let key = InscriptionIdValue::from_bytes(&key);
-                    collection_inscription_id_to_kinds.remove(&key)?;
-                }
-            }
+    let mut brc20_balances = wtx.open_table(BRC20_BALANCES)?;
+    let mut brc20_token = wtx.open_table(BRC20_TOKEN)?;
+    let mut events = wtx.open_table(BRC20_EVENTS)?;
+    let mut brc20_transferlog = wtx.open_table(BRC20_TRANSFERABLELOG)?;
+    let mut brc20_inscribe_transfer = wtx.open_table(BRC20_INSCRIBE_TRANSFER)?;
+    let mut ord_tx_id_to_operations = wtx.open_table(ORD_TX_TO_OPERATIONS)?;
+    let mut collections_key_to_inscription_id =
+      wtx.open_table(COLLECTIONS_KEY_TO_INSCRIPTION_ID)?;
+    let mut collection_inscription_id_to_kinds =
+      wtx.open_table(COLLECTIONS_INSCRIPTION_ID_TO_KINDS)?;
+    let binding = traces.unwrap();
+    let traces = binding.value();
+    let traces: Vec<TraceNode> = rmp_serde::from_slice(traces)?;
+    for node in traces {
+      let key = node.key;
+      match node.trace_type {
+        CacheTableIndex::TXID_TO_INSCRIPTION_RECEIPTS => {}
+        CacheTableIndex::SEQUENCE_NUMBER_TO_SATPOINT => {}
+        CacheTableIndex::SAT_TO_SEQUENCE_NUMBER => {}
+        CacheTableIndex::HOME_INSCRIPTIONS => {}
+        CacheTableIndex::INSCRIPTION_ID_TO_SEQUENCE_NUMBER => {}
+        CacheTableIndex::SEQUENCE_NUMBER_TO_CHILDREN => {}
+        CacheTableIndex::SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY => {}
+        CacheTableIndex::INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER => {}
+        CacheTableIndex::OUTPOINT_TO_ENTRY => {}
+        CacheTableIndex::BRC20_BALANCES => {
+          let key = String::from_utf8(key).unwrap();
+          let key = key.as_str();
+          brc20_balances.remove(key)?;
         }
-        Ok(true)
-    }
-    async fn get_client_event(&self) -> crate::Result<ClientEvent, SimulateError> {
-        let ret = self.client.block_get_event()?;
-        Ok(ret)
-    }
-    pub fn execute_tx(&self, tx: &Transaction, commit: bool) -> crate::Result<Vec<Receipt>, SimulateError> {
-        let mut wtx = self.simulate_index.begin_write()?;
-        let traces = Rc::new(RefCell::new(vec![]));
-        let ret = self.simulate_tx(tx, &wtx, traces)?;
-        if commit {
-            wtx.commit()?;
+        CacheTableIndex::BRC20_TOKEN => {
+          let key = String::from_utf8(key).unwrap();
+          let key = key.as_str();
+          brc20_token.remove(key)?;
         }
+        CacheTableIndex::BRC20_EVENTS => {
+          let key = key.as_slice();
+          let _key: &Txid = &rmp_serde::from_slice(key).unwrap();
+          // events.remove(&key.store())?;
+        }
+        CacheTableIndex::BRC20_TRANSFERABLELOG => {
+          let key = String::from_utf8(key).unwrap();
+          brc20_transferlog.remove(key.as_str())?;
+        }
+        CacheTableIndex::BRC20_INSCRIBE_TRANSFER => {
+          let key = InscriptionIdValue::from_bytes(key.as_slice());
+          brc20_inscribe_transfer.remove(&key)?;
+        }
+        CacheTableIndex::ORD_TX_TO_OPERATIONS => {
+          let key: [u8; 32] = key.as_slice().try_into().unwrap();
+          ord_tx_id_to_operations.remove(&key)?;
+        }
+        CacheTableIndex::COLLECTIONS_KEY_TO_INSCRIPTION_ID => {
+          let key = String::from_utf8(key).unwrap();
+          collections_key_to_inscription_id.remove(key.as_str())?;
+        }
+        CacheTableIndex::COLLECTIONS_INSCRIPTION_ID_TO_KINDS => {
+          let key = InscriptionIdValue::from_bytes(&key);
+          collection_inscription_id_to_kinds.remove(&key)?;
+        }
+      }
+    }
+    Ok(true)
+  }
+  async fn get_client_event(&self) -> crate::Result<ClientEvent, SimulateError> {
+    let ret = self.client.block_get_event()?;
+    Ok(ret)
+  }
+  pub fn execute_tx(
+    &self,
+    tx: &Transaction,
+    commit: bool,
+  ) -> crate::Result<Vec<Receipt>, SimulateError> {
+    let mut wtx = self.simulate_index.begin_write()?;
+    let traces = Rc::new(RefCell::new(vec![]));
+    let ret = self.simulate_tx(tx, &wtx, traces)?;
+    if commit {
+      wtx.commit()?;
+    }
 
     Ok(ret)
   }
@@ -228,6 +234,12 @@ impl SimulatorServer {
     let tab = rx.open_table(BRC20_EVENTS)?;
     let ret = get_transaction_receipts(&tab, &tx_id)?;
     Ok(ret)
+  }
+  pub fn is_tx_simulated(&self, txid: Txid) -> Result<bool, anyhow::Error> {
+    let rx = self.simulate_index.begin_read()?;
+    let tab = rx.open_table(SIMULATE_TX_FLAG)?;
+    let ret = tab.get(&txid.store())?;
+    Ok(ret.is_some())
   }
   fn simulate_tx(
     &self,
@@ -267,6 +279,7 @@ impl SimulatorServer {
     let sat_to_point = wtx.open_table(SAT_TO_SATPOINT).unwrap();
     let statis_to_count = wtx.open_table(STATISTIC_TO_COUNT).unwrap();
     let traces_table = wtx.open_table(SIMULATE_TRACE_TABLE)?;
+    let flags = wtx.open_table(SIMULATE_TX_FLAG)?;
 
     let h = height;
     let ts = block.header.time;
@@ -321,6 +334,7 @@ impl SimulatorServer {
       sat_to_satpoint: Rc::new(RefCell::new(sat_to_point)),
       statistic_to_count: Rc::new(RefCell::new(statis_to_count)),
       trace_table: Rc::new(RefCell::new(traces_table)),
+      flags: Rc::new(RefCell::new(flags)),
       _marker_a: Default::default(),
       client: Some(self.client.clone()),
       traces: traces.clone(),
@@ -413,6 +427,7 @@ impl SimulatorServer {
     };
     sim.index_block(block.clone(), height, cache, &processor, &mut operations)?;
     processor.save_traces(&tx.txid())?;
+    processor.tag_tx_executed(&tx.txid())?;
 
     Ok(())
   }
@@ -521,7 +536,7 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
       processor.clone(),
     )?;
 
-    if processor.internal.internal.index_sats{
+    if processor.internal.internal.index_sats {
       let mut coinbase_inputs = VecDeque::new();
 
       let h = Height(height);

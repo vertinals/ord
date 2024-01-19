@@ -68,6 +68,7 @@ pub struct StorageProcessor<'a, 'db, 'tx> {
   pub sat_to_satpoint: Rc<RefCell<Table<'db, 'tx, u64, &'static SatPointValue>>>,
   pub statistic_to_count: Rc<RefCell<Table<'db, 'tx, u64, u64>>>,
   pub trace_table: Rc<RefCell<Table<'db, 'tx, &'static TxidValue, &'static [u8]>>>,
+  pub flags: Rc<RefCell<Table<'db, 'tx, &'static TxidValue, u32>>>,
   pub _marker_a: PhantomData<&'a ()>,
 
   pub client: Option<DirectClient<KVStorageProcessor<ThreadSafeDB<MemoryDB>>>>,
@@ -428,6 +429,12 @@ impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
     let key = tx_id.store();
     let value = rmp_serde::to_vec(&insert_traces)?;
     table.insert(&key, value.as_slice())?;
+    Ok(())
+  }
+  pub fn tag_tx_executed(&self, tx_id: &Txid) -> crate::Result<()> {
+    let mut table = self.flags.borrow_mut();
+    let key = tx_id.store();
+    table.insert(&key, 1)?;
     Ok(())
   }
 }

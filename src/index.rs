@@ -104,6 +104,7 @@ define_table! { BRC20_INSCRIBE_TRANSFER, InscriptionIdValue, &[u8] }
 
 // simulate
 define_table! { SIMULATE_TRACE_TABLE, &TxidValue, &[u8] }
+define_table! { SIMULATE_TX_FLAG, &TxidValue, u32 }
 
 #[derive(Debug, PartialEq)]
 pub enum List {
