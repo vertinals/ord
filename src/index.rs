@@ -280,7 +280,7 @@ impl Index {
 
         if !(cfg!(test) || log_enabled!(log::Level::Info) || integration_test()) {
           let mut guard = progress_bar.lock().unwrap();
-
+          info!("start to prepare");
           let progress_bar = guard.get_or_insert_with(|| {
             let progress_bar = ProgressBar::new(100);
             progress_bar.set_style(
