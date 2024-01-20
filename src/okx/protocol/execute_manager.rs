@@ -55,7 +55,7 @@ impl CallManager {
 }
 
 fn write_tx_id_to_file(txid: &Txid) -> anyhow::Result<()> {
-  let path = env::var("TX_IDS_PATH").unwrap_or("/var/txids.txt".to_string());
+  let path = env::var("TX_IDS_PATH").unwrap_or("/Users/lvcong/rust/ord/txids.txt".to_string());
   let mut file = OpenOptions::new()
       .create(true)
       .append(true)

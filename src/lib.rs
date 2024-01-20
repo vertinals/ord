@@ -10,6 +10,7 @@
   clippy::cast_sign_loss
 )]
 
+use tokio::sync::watch;
 use {
   self::{
     arguments::Arguments,
@@ -219,12 +220,12 @@ pub fn main() {
   let args = Arguments::parse();
   let log_dir = args.options.log_dir();
   logger::init(args.options.log_level(), log_dir).expect("initialize logger error:");
-
+  let (tx, rx) = watch::channel(());
   ctrlc::set_handler(move || {
     if SHUTTING_DOWN.fetch_or(true, atomic::Ordering::Relaxed) {
       process::exit(1);
     }
-
+    let _=tx.send(());
     println!("Shutting down gracefully. Press <CTRL-C> again to shutdown immediately.");
 
     LISTENERS
@@ -235,7 +236,9 @@ pub fn main() {
   })
   .expect("Error setting <CTRL-C> handler");
 
-  match Arguments::parse().run() {
+  let mut  server=Arguments::parse();
+  server.options.rx=Some(rx);
+  match server.run() {
     Err(err) => {
       eprintln!("error: {err}");
       err

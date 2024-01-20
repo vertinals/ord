@@ -682,6 +682,7 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
   let sim_rpc = ops.simulate_bitcoin_rpc_url.clone().unwrap();
   let sim_user = ops.simulate_bitcoin_rpc_user.clone().unwrap();
   let sim_pass = ops.simulate_bitcoin_rpc_pass.clone().unwrap();
+  let rx=ops.rx.clone().unwrap();
 
   let config = IndexerConfiguration {
     mq: ZMQConfiguration {
@@ -697,14 +698,11 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
   };
   let rt = Runtime::new().unwrap();
   let client = sync_create_and_start_processor(config.clone());
-  let (tx, rx) = watch::channel(());
   let server = SimulatorServer::new(ops.simulate_index.unwrap(), internal.clone(), client).unwrap();
   let start_server = server.clone();
   thread::spawn(move || {
     rt.block_on(async {
       let handler = start_server.start(rx.clone()).await;
-      wait_exit_signal().await.unwrap();
-      tx.send(()).unwrap();
       handler.await.unwrap();
     });
   });
