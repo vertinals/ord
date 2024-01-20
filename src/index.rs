@@ -279,6 +279,7 @@ impl Index {
         once.call_once(|| println!("Index file `{}` needs recovery. This can take a long time, especially for the --index-sats index.", index_path.display()));
 
         if !(cfg!(test) || log_enabled!(log::Level::Info) || integration_test()) {
+          info!("start to prepare111");
           let mut guard = progress_bar.lock().unwrap();
           info!("start to prepare");
           let progress_bar = guard.get_or_insert_with(|| {
