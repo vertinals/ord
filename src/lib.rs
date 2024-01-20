@@ -10,6 +10,7 @@
   clippy::cast_sign_loss
 )]
 
+use log::info;
 use tokio::sync::watch;
 use {
   self::{
@@ -227,6 +228,7 @@ pub fn main() {
     }
     let _=tx.send(());
     println!("Shutting down gracefully. Press <CTRL-C> again to shutdown immediately.");
+    info!("Shutting down gracefully. Press <CTRL-C> again to shutdown immediately.");
 
     LISTENERS
       .lock()
