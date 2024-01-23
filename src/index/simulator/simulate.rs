@@ -42,7 +42,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{atomic, Arc};
-use std::thread;
+use std::{panic, thread};
 use tokio::runtime::Runtime;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -219,14 +219,17 @@ impl SimulatorServer {
     tx: &Transaction,
     commit: bool,
   ) -> crate::Result<Vec<Receipt>, SimulateError> {
-    let mut wtx = self.simulate_index.begin_write()?;
-    let traces = Rc::new(RefCell::new(vec![]));
-    let ret = self.simulate_tx(tx, &wtx, traces)?;
-    if commit {
-      wtx.commit()?;
-    }
-
-    Ok(ret)
+    let ret = panic::catch_unwind(|| {
+      let mut wtx = self.simulate_index.begin_write()?;
+      let traces = Rc::new(RefCell::new(vec![]));
+      let ret = self.simulate_tx(tx, &wtx, traces)?;
+      if commit {
+        wtx.commit()?;
+      }
+      Ok(ret)
+    })
+    .map_err(|e| anyhow!("execute tx error:{:?}", e))?;
+    ret
   }
 
   pub fn get_receipt(&self, tx_id: Txid) -> Result<Vec<Receipt>, anyhow::Error> {
@@ -682,7 +685,7 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
   let sim_rpc = ops.simulate_bitcoin_rpc_url.clone().unwrap();
   let sim_user = ops.simulate_bitcoin_rpc_user.clone().unwrap();
   let sim_pass = ops.simulate_bitcoin_rpc_pass.clone().unwrap();
-  let rx=ops.rx.clone().unwrap();
+  let rx = ops.rx.clone().unwrap();
 
   let config = IndexerConfiguration {
     mq: ZMQConfiguration {
