@@ -256,20 +256,14 @@ impl SimulatorServer {
     let home_inscriptions = wtx.open_table(HOME_INSCRIPTIONS).unwrap();
     let inscription_id_to_sequence_number =
       wtx.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER).unwrap();
-    let inscription_number_to_sequence_number = wtx
-      .open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER)
-      .unwrap();
-    let sat_to_sequence_number = wtx.open_multimap_table(SAT_TO_SEQUENCE_NUMBER).unwrap();
-    let satpoint_to_sequence_number = wtx
-      .open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER)
-      .unwrap();
-    let sequence_number_to_children = wtx
-      .open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN)
-      .unwrap();
+    let inscription_number_to_sequence_number =
+      wtx.open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER)?;
+    let sat_to_sequence_number = wtx.open_multimap_table(SAT_TO_SEQUENCE_NUMBER)?;
+    let satpoint_to_sequence_number = wtx.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER)?;
+    let sequence_number_to_children = wtx.open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN)?;
+
     let sequence_number_to_inscription_entry = Rc::new(RefCell::new(
-      wtx
-        .open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)
-        .unwrap(),
+      wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)?,
     ));
     let sequence_number_to_satpoint = wtx.open_table(SEQUENCE_NUMBER_TO_SATPOINT)?;
     let transaction_id_to_transaction = wtx.open_table(TRANSACTION_ID_TO_TRANSACTION)?;
@@ -501,10 +495,10 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
           tx_out_cache.insert(out_point, tx_out);
         } else {
           let tx = processor.get_transaction(&out_point.txid)?;
-          if tx.is_none(){
+          if tx.is_none() {
             return Err(SimulateError::TxNotFound(out_point.txid.clone()));
           }
-          let tx=tx.unwrap();
+          let tx = tx.unwrap();
           let out = tx.output[out_point.vout as usize].clone();
           let tx_out = TxOut {
             value: out.value,
