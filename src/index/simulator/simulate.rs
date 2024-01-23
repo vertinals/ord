@@ -219,17 +219,13 @@ impl SimulatorServer {
     tx: &Transaction,
     commit: bool,
   ) -> crate::Result<Vec<Receipt>, SimulateError> {
-    let ret = panic::catch_unwind(|| {
-      let mut wtx = self.simulate_index.begin_write()?;
-      let traces = Rc::new(RefCell::new(vec![]));
-      let ret = self.simulate_tx(tx, &wtx, traces)?;
-      if commit {
-        wtx.commit()?;
-      }
-      Ok(ret)
-    })
-    .map_err(|e| anyhow!("execute tx error:{:?}", e))?;
-    ret
+    let mut wtx = self.simulate_index.begin_write()?;
+    let traces = Rc::new(RefCell::new(vec![]));
+    let ret = self.simulate_tx(tx, &wtx, traces)?;
+    if commit {
+      wtx.commit()?;
+    }
+    Ok(ret)
   }
 
   pub fn get_receipt(&self, tx_id: Txid) -> Result<Vec<Receipt>, anyhow::Error> {
@@ -275,12 +271,12 @@ impl SimulatorServer {
         .open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)
         .unwrap(),
     ));
-    let sequence_number_to_satpoint = wtx.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
-    let transaction_id_to_transaction = wtx.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
-    let outpoint_to_entry = Rc::new(RefCell::new(wtx.open_table(OUTPOINT_TO_ENTRY).unwrap()));
-    let outpoint_to_sat_ranges = wtx.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
-    let sat_to_point = wtx.open_table(SAT_TO_SATPOINT).unwrap();
-    let statis_to_count = wtx.open_table(STATISTIC_TO_COUNT).unwrap();
+    let sequence_number_to_satpoint = wtx.open_table(SEQUENCE_NUMBER_TO_SATPOINT)?;
+    let transaction_id_to_transaction = wtx.open_table(TRANSACTION_ID_TO_TRANSACTION)?;
+    let outpoint_to_entry = Rc::new(RefCell::new(wtx.open_table(OUTPOINT_TO_ENTRY)?));
+    let outpoint_to_sat_ranges = wtx.open_table(OUTPOINT_TO_SAT_RANGES)?;
+    let sat_to_point = wtx.open_table(SAT_TO_SATPOINT)?;
+    let statis_to_count = wtx.open_table(STATISTIC_TO_COUNT)?;
     let traces_table = wtx.open_table(SIMULATE_TRACE_TABLE)?;
     let flags = wtx.open_table(SIMULATE_TX_FLAG)?;
 
@@ -491,7 +487,7 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
           } else if tx_out_cache.contains(&prev_output) {
             cache_outputs_count.fetch_add(1, Ordering::Relaxed);
             continue;
-          } else if let Some(txout) = processor.get_txout_by_outpoint(&prev_output).unwrap() {
+          } else if let Some(txout) = processor.get_txout_by_outpoint(&prev_output)? {
             miss_outputs_count.fetch_add(1, Ordering::Relaxed);
             tx_outs.push((prev_output, Some(txout)));
           } else {
@@ -504,7 +500,11 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
         if let Some(tx_out) = value {
           tx_out_cache.insert(out_point, tx_out);
         } else {
-          let tx = processor.get_transaction(&out_point.txid)?.unwrap();
+          let tx = processor.get_transaction(&out_point.txid)?;
+          if tx.is_none(){
+            return Err(SimulateError::TxNotFound(out_point.txid.clone()));
+          }
+          let tx=tx.unwrap();
           let out = tx.output[out_point.vout as usize].clone();
           let tx_out = TxOut {
             value: out.value,
@@ -718,6 +718,7 @@ mod tests {
   use bitcoincore_rpc::RpcApi;
   use indexer_sdk::factory::common::new_client_for_test;
   use log::LevelFilter;
+  use std::path::PathBuf;
   use std::str::FromStr;
 
   #[ignore]
@@ -789,3 +790,5 @@ mod tests {
     opt
   }
 }
+#[test]
+pub fn test_asd() {}
