@@ -496,7 +496,7 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
         } else {
           let tx = processor.get_transaction(&out_point.txid)?;
           if tx.is_none() {
-            return Err(SimulateError::TxNotFound(out_point.txid.clone()));
+            return Err(anyhow!("missing transaction {}", out_point.txid.clone()));
           }
           let tx = tx.unwrap();
           let out = tx.output[out_point.vout as usize].clone();
