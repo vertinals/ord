@@ -333,8 +333,8 @@ impl SimulatorServer {
       traces: traces.clone(),
       context: ctx,
     };
-
-    self.loop_simulate_tx(h, &block, &processor, &tx)?;
+    let mut depth = 0;
+    self.loop_simulate_tx(h, &block, &processor, &tx, &mut depth)?;
     let ret = brc20_receipts.borrow();
     let ret = ret.deref().clone();
     Ok(ret)
@@ -345,7 +345,13 @@ impl SimulatorServer {
     block: &Block,
     processor: &StorageProcessor,
     tx: &Transaction,
+    depth: &mut i32,
   ) -> crate::Result<(), SimulateError> {
+    if *depth >= 20 {
+      error!("simulate tx:{:?} depth:{:?} over 20", tx.txid(), depth);
+      return Err(SimulateError::StackOverFlow);
+    }
+    *depth = *depth + 1;
     let tx_id = tx.txid();
     let mut need_handle_first = vec![];
     for input in &tx.input {
@@ -375,7 +381,7 @@ impl SimulatorServer {
         "parent tx :{:?},exist,but not in utxo data,child_hash:{:?},need to simulate parent tx",
         &parent, &tx_id
       );
-      self.loop_simulate_tx(h, block, processor, &parent_tx)?;
+      self.loop_simulate_tx(h, block, processor, &parent_tx, depth)?;
       if index == need_handle_first.len() - 1 {
         info!(
           "all parent txs {:?} simulate done,start to simulate child_hash:{:?}",
