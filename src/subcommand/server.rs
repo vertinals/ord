@@ -1,9 +1,9 @@
-use std::panic;
-use std::process::exit;
 use crate::index::simulator::simulate::{start_simulator, SimulatorServer};
 use crate::okx::datastore::brc20::Receipt;
 use bitcoincore_rpc::Auth;
 use log::error;
+use std::panic;
+use std::process::exit;
 use {
   self::{
     accept_encoding::AcceptEncoding,
@@ -190,11 +190,16 @@ pub(crate) struct Server {
 
 impl Server {
   pub(crate) fn run(self, options: Options, index: Arc<Index>, handle: Handle) -> SubcommandResult {
-    panic::set_hook(Box::new(|panic_info| {
-      println!("panic occurred: {:?}", panic_info);
-      error!("panic occurred: {:?}", panic_info);
-      exit(-1);
-    }));
+    // panic::set_hook(Box::new(|panic_info| {
+    //   println!("panic occurred: {:?}", panic_info);
+    //   error!("panic occurred: {:?}", panic_info);
+    //   exit(-1);
+    // }));
+    let sim_option = options.clone();
+    let sim_index = index.clone();
+    let simulator_server = thread::spawn(move || start_simulator(sim_option, sim_index))
+      .join()
+      .unwrap();
     Runtime::new()?.block_on(async {
       let index_clone = index.clone();
 
@@ -208,13 +213,6 @@ impl Server {
         thread::sleep(Duration::from_millis(5000));
       });
       INDEXER.lock().unwrap().replace(index_thread);
-
-      let sim_option = options.clone();
-      let sim_index = index.clone();
-      let simulator_server = thread::spawn(move || start_simulator(sim_option, sim_index))
-        .join()
-        .unwrap();
-
       let client = Arc::new(
         Client::new(
           options.rpc_url.as_ref().unwrap().as_ref(),
