@@ -68,36 +68,43 @@ unsafe impl Send for SimulatorServer {}
 unsafe impl Sync for SimulatorServer {}
 
 impl SimulatorServer {
-  pub async fn start(&self, exit: watch::Receiver<()>) -> JoinHandle<()> {
+  pub async fn start(
+    &self,
+    exit: async_channel::Receiver<tokio::sync::oneshot::Sender<()>>,
+  ) -> JoinHandle<()> {
     let internal = self.clone();
     tokio::spawn(async move {
       internal.on_start(exit).await;
     })
   }
-  async fn on_start(self, mut exit: watch::Receiver<()>) {
+  async fn on_start(self, mut exit: async_channel::Receiver<tokio::sync::oneshot::Sender<()>>) {
     loop {
-      if SHUTTING_DOWN.load(atomic::Ordering::Relaxed) {
-        break;
-      }
       tokio::select! {
-          event=self.get_client_event()=>{
-              match event{
-                 Ok(event) => {
-                     if let Err(e)= self.handle_event(&event).await{
-                             log::error!("handle event error: {:?}", e);
-                     }
-                 }
-                 Err(e) => {
-                     log::error!("receive event error: {:?}", e);
-                     break;
-                 }
-             }
-          },
-          _ = exit.changed() => {
-         info!("simulator receive exit signal, exit.");
-         break;
-      }
+       event=self.get_client_event()=>{
+           match event{
+              Ok(event) => {
+                  if let Err(e)= self.handle_event(&event).await{
+                          log::error!("handle event error: {:?}", e);
+                  }
+              }
+              Err(e) => {
+                  log::error!("receive event error: {:?}", e);
+                  break;
+              }
+          }
+       },
+       notify = exit.recv() => {
+             if notify.is_ok(){
+                 log::info!("simulator receive exit signal, exit.");
+                 let notify=notify.unwrap();
+                 let _=notify.send(());
+                 break;
+             }else{
+                error!("receive error notify ,simulator receive exit signal, exit. ,");
+                break;
+           }
          }
+      }
     }
   }
 
@@ -786,6 +793,7 @@ mod tests {
       simulate_bitcoin_rpc_pass: Some("bitcoinrpc".to_string()),
       simulate_bitcoin_rpc_user: Some("bitcoinrpc".to_string()),
       simulate_index: Some("./simulate".to_string().into()),
+      rx: None,
     };
     opt
   }

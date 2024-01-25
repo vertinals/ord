@@ -108,7 +108,7 @@ pub struct Options {
   pub(crate) simulate_index: Option<PathBuf>,
 
   #[clap(skip)]
-  pub rx: Option<tokio::sync::watch::Receiver<()>>,
+  pub rx: Option<async_channel::Receiver<tokio::sync::oneshot::Sender<()>>>,
 }
 
 #[derive(Debug, Clone)]

@@ -76,6 +76,7 @@ rmp-serde = "1.1.2"
 rayon = "1.8.0"
 indexer-sdk={git="https://github.com/okx/indexer-sdk.git",rev = "1ddbeeeb58fd9564f4d0637123e0163d71eb7262"}
 reqwest = { version = "0.11.10", features = ["blocking","json"]}
+async-channel = "1.9.0"
 [dev-dependencies]
 criterion = "0.5.1"
 executable-path = "1.0.0"

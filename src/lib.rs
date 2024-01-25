@@ -220,13 +220,21 @@ fn gracefully_shutdown_indexer() {
 pub fn main() {
   let args = Arguments::parse();
   let log_dir = args.options.log_dir();
+  let enable_pending = args.options.simulate_enable;
   logger::init(args.options.log_level(), log_dir).expect("initialize logger error:");
-  let (tx, rx) = watch::channel(());
+  let (tx, rx) = async_channel::bounded(1);
   ctrlc::set_handler(move || {
     if SHUTTING_DOWN.fetch_or(true, atomic::Ordering::Relaxed) {
       process::exit(1);
     }
-    let _=tx.send(());
+    let (notify_tx, notify_rx) = tokio::sync::oneshot::channel();
+    if enable_pending {
+      info!("pending enbale,begin to send exit signal to pending thread");
+      let _ = tx.send_blocking(notify_tx);
+      let _ = notify_rx.blocking_recv();
+      info!("pending thread exit");
+    }
+
     println!("Shutting down gracefully. Press <CTRL-C> again to shutdown immediately.");
     info!("Shutting down gracefully. Press <CTRL-C> again to shutdown immediately.");
 
@@ -238,8 +246,8 @@ pub fn main() {
   })
   .expect("Error setting <CTRL-C> handler");
 
-  let mut  server=Arguments::parse();
-  server.options.rx=Some(rx);
+  let mut server = Arguments::parse();
+  server.options.rx = Some(rx);
   match server.run() {
     Err(err) => {
       eprintln!("error: {err}");
