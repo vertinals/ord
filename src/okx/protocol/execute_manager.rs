@@ -39,9 +39,11 @@ impl CallManager {
 
     unsafe {
       if *LATEST_HEIGHT  <=  (context.block_height() + 1) as u64 {
-        // append to file
-        write_tx_id_to_file(txid).unwrap();
-        info!("save transaction receipts: txid: {}", txid);
+        if receipts.len()>0{
+          // append to file
+          write_tx_id_to_file(txid).unwrap();
+          info!("save transaction receipts: txid: {}", txid);
+        }
       }
     }
 

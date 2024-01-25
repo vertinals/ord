@@ -1,7 +1,3 @@
-use std::env;
-use std::env::consts::OS;
-use std::fs::{OpenOptions, write};
-use std::io::Write;
 use crate::index::{InscriptionEntryValue, InscriptionIdValue, OutPointValue, TxidValue};
 use crate::inscriptions::InscriptionId;
 use crate::okx::datastore::brc20::redb::table::{
@@ -31,6 +27,10 @@ use anyhow::anyhow;
 use bitcoin::{Network, OutPoint, TxOut, Txid};
 use log::info;
 use redb::Table;
+use std::env;
+use std::env::consts::OS;
+use std::fs::{write, OpenOptions};
+use std::io::Write;
 
 #[allow(non_snake_case)]
 pub struct Context<'a, 'db, 'txn> {
@@ -231,14 +231,13 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for Context<'a, 'db, 'txn> {
     update_mint_token_info(self.BRC20_TOKEN, tick, minted_amt, minted_block_number)
   }
 
-    fn save_transaction_receipts(
-        &mut self,
-        txid: &Txid,
-        receipt: &[Receipt],
-    ) -> crate::Result<(), Self::Error> {
-        info!("save transaction receipts: txid: {}, receipt: {:?}", txid, receipt);
-        save_transaction_receipts(self.BRC20_EVENTS, txid, receipt)
-    }
+  fn save_transaction_receipts(
+    &mut self,
+    txid: &Txid,
+    receipt: &[Receipt],
+  ) -> crate::Result<(), Self::Error> {
+    save_transaction_receipts(self.BRC20_EVENTS, txid, receipt)
+  }
 
   fn insert_transferable(
     &mut self,
