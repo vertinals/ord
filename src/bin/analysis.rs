@@ -54,7 +54,7 @@ fn main() {
 
     println!("hit ratio: {:.2} %", percent);
 
-    let correct_percebt = right as f32 /  sum as f32 * 100f32;
+    let correct_percebt = right as f32 /  hit as f32 * 100f32;
 
     println!("correct ratio: {:.2} %", correct_percebt);
 }
