@@ -213,7 +213,7 @@ mod tests {
           unbound: false,
           vindicated: false,
           inscription: inscription.clone(),
-          transfer_to_coin_base:false
+          transfer_to_coin_base: false
         },
       )
       .unwrap(),

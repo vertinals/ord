@@ -31,7 +31,8 @@ impl Message {
         cursed: false,
         unbound: false,
         vindicated: false,
-        inscription: _, ..
+        inscription: _,
+        ..
       } if sat_in_outputs => {
         match deserialize_brc20_operation(
           new_inscriptions
@@ -89,7 +90,7 @@ mod tests {
   use crate::okx::protocol::context::Context;
   use crate::okx::protocol::BlockContext;
   use bitcoin::{Network, OutPoint};
-  use redb::{Database};
+  use redb::Database;
   use std::str::FromStr;
   use tempfile::NamedTempFile;
 

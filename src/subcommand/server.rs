@@ -1,4 +1,8 @@
 use crate::index::simulator::simulate::{start_simulator, SimulatorServer};
+use crate::index::simulator::types::ExecuteTxResponse;
+use crate::okx::datastore::brc20::Receipt;
+use crate::okx::datastore::ord::InscriptionOp;
+use crate::subcommand::server::ord::OrdInscription;
 use bitcoincore_rpc::Auth;
 use {
   self::{
@@ -47,10 +51,6 @@ use {
   },
   utoipa::OpenApi,
 };
-use crate::index::simulator::types::ExecuteTxResponse;
-use crate::okx::datastore::brc20::Receipt;
-use crate::okx::datastore::ord::InscriptionOp;
-use crate::subcommand::server::ord::OrdInscription;
 
 mod accept_encoding;
 mod accept_json;
@@ -190,6 +190,12 @@ pub(crate) struct Server {
 
 impl Server {
   pub(crate) fn run(self, options: Options, index: Arc<Index>, handle: Handle) -> SubcommandResult {
+    let sim_option = options.clone();
+    let sim_index = index.clone();
+    let simulator_server = thread::spawn(move || start_simulator(sim_option, sim_index))
+      .join()
+      .unwrap();
+
     Runtime::new()?.block_on(async {
       let index_clone = index.clone();
 
@@ -203,12 +209,6 @@ impl Server {
         thread::sleep(Duration::from_millis(5000));
       });
       INDEXER.lock().unwrap().replace(index_thread);
-
-      let sim_option = options.clone();
-      let sim_index = index.clone();
-      let simulator_server = thread::spawn(move || start_simulator(sim_option, sim_index))
-        .join()
-        .unwrap();
 
       let client = Arc::new(
         Client::new(
@@ -1705,9 +1705,7 @@ impl Server {
     Path(tx_id): Path<Txid>,
   ) -> ApiResult<Vec<Receipt>> {
     if simulator.is_none() {
-
-
-      return Err( ApiError::Internal("simulator not enabled".to_string()));
+      return Err(ApiError::Internal("simulator not enabled".to_string()));
     }
 
     let tx = client.get_raw_transaction(&tx_id, None);
@@ -1716,19 +1714,18 @@ impl Server {
     }
 
     match simulator.unwrap().execute_tx(tx.as_ref().unwrap(), false) {
-      Ok(data) => {
-        Ok(Json(ApiResponse::ok(data.brc20_receipts))) },
+      Ok(data) => Ok(Json(ApiResponse::ok(data.brc20_receipts))),
       Err(err) => Err(ApiError::Internal(err.to_string())),
     }
   }
 
-  async fn simulate_ord( Extension(client): Extension<Arc<Client>>,
-                         Extension(simulator): Extension<Option<SimulatorServer>>,
-                         Path(tx_id): Path<Txid>) -> ApiResult<Vec<InscriptionOp>> {
+  async fn simulate_ord(
+    Extension(client): Extension<Arc<Client>>,
+    Extension(simulator): Extension<Option<SimulatorServer>>,
+    Path(tx_id): Path<Txid>,
+  ) -> ApiResult<Vec<InscriptionOp>> {
     if simulator.is_none() {
-
-
-      return Err( ApiError::Internal("simulator not enabled".to_string()));
+      return Err(ApiError::Internal("simulator not enabled".to_string()));
     }
 
     let tx = client.get_raw_transaction(&tx_id, None);
@@ -1736,11 +1733,8 @@ impl Server {
       return Err(ApiError::NotFound("tx not found".to_string()));
     }
 
-
-
     match simulator.unwrap().execute_tx(tx.as_ref().unwrap(), false) {
-      Ok(data) => {
-        Ok(Json(ApiResponse::ok(data.ord_operations))) },
+      Ok(data) => Ok(Json(ApiResponse::ok(data.ord_operations))),
       Err(err) => Err(ApiError::Internal(err.to_string())),
     }
   }

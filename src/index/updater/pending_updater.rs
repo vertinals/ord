@@ -533,14 +533,13 @@ impl<'a, 'db, 'tx> PendingUpdater<'a, 'db, 'tx> {
     } else {
       new_satpoint.store()
     };
-    let mut  is_transfer_to_coinbase=false;
-    let point=if new_satpoint.outpoint.is_null() && new_satpoint.offset == u64::MAX {
-      is_transfer_to_coinbase=true;
+    let mut is_transfer_to_coinbase = false;
+    let point = if new_satpoint.outpoint.is_null() && new_satpoint.offset == u64::MAX {
+      is_transfer_to_coinbase = true;
       None
     } else {
       Some(new_satpoint)
     };
-
 
     self
       .operations

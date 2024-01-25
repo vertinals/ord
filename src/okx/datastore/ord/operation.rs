@@ -24,7 +24,7 @@ pub enum Action {
     unbound: bool,
     inscription: Inscription,
     #[serde(default)]
-    transfer_to_coin_base:bool,
+    transfer_to_coin_base: bool,
     #[serde(default)]
     vindicated: bool,
   },

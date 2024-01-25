@@ -714,11 +714,11 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
 
 #[cfg(test)]
 mod tests {
-  use std::path::PathBuf;
   use super::*;
   use bitcoincore_rpc::RpcApi;
   use indexer_sdk::factory::common::new_client_for_test;
   use log::LevelFilter;
+  use std::path::PathBuf;
   use std::str::FromStr;
 
   #[ignore]
