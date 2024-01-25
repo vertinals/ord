@@ -1911,6 +1911,7 @@ dependencies = [
 [[package]]
 name = "indexer-sdk"
 version = "0.1.0"
+source = "git+https://github.com/okx/indexer-sdk.git?rev=08ff4f98054b9a2545b9ff77c07c7c0423dd9e16#08ff4f98054b9a2545b9ff77c07c7c0423dd9e16"
 dependencies = [
  "async-channel 1.9.0",
  "async-trait",

@@ -57,13 +57,13 @@ impl CallManager {
 }
 
 fn write_tx_id_to_file(txid: &Txid) -> anyhow::Result<()> {
-  // let path = env::var("TX_IDS_PATH").unwrap_or("/var/txids.txt".to_string());
-  // let mut file = OpenOptions::new()
-  //     .create(true)
-  //     .append(true)
-  //     .open(path)?;
-  //
-  // let content_to_append = format!("{:?}\n", txid);
-  // file.write_all(content_to_append.as_bytes())?;
+  let path = env::var("TX_IDS_PATH").unwrap_or("/var/txids.txt".to_string());
+  let mut file = OpenOptions::new()
+      .create(true)
+      .append(true)
+      .open(path)?;
+
+  let content_to_append = format!("{:?}\n", txid);
+  file.write_all(content_to_append.as_bytes())?;
   Ok(())
 }
