@@ -10,6 +10,7 @@
   clippy::cast_sign_loss
 )]
 
+use std::thread::sleep;
 use log::info;
 use tokio::sync::watch;
 use {
@@ -227,13 +228,6 @@ pub fn main() {
     if SHUTTING_DOWN.fetch_or(true, atomic::Ordering::Relaxed) {
       process::exit(1);
     }
-    let (notify_tx, notify_rx) = tokio::sync::oneshot::channel();
-    if enable_pending {
-      info!("pending enbale,begin to send exit signal to pending thread");
-      let _ = tx.send_blocking(notify_tx);
-      let _ = notify_rx.blocking_recv();
-      info!("pending thread exit");
-    }
 
     println!("Shutting down gracefully. Press <CTRL-C> again to shutdown immediately.");
     info!("Shutting down gracefully. Press <CTRL-C> again to shutdown immediately.");
@@ -243,6 +237,15 @@ pub fn main() {
       .unwrap()
       .iter()
       .for_each(|handle| handle.graceful_shutdown(Some(Duration::from_millis(100))));
+
+    let (notify_tx, notify_rx) = tokio::sync::oneshot::channel();
+    if enable_pending {
+      info!("pending enbale,begin to send exit signal to pending thread");
+      let _ = tx.send_blocking(notify_tx);
+      let _ = notify_rx.blocking_recv();
+    }else{
+      info!("pending disable");
+    }
   })
   .expect("Error setting <CTRL-C> handler");
 
@@ -270,4 +273,5 @@ pub fn main() {
   }
 
   gracefully_shutdown_indexer();
+
 }

@@ -25,9 +25,11 @@ use anyhow::anyhow;
 use bitcoin::{Block, OutPoint, Transaction, TxOut, Txid};
 use indexer_sdk::client::drect::DirectClient;
 use indexer_sdk::client::event::ClientEvent;
-use indexer_sdk::client::SyncClient;
+use indexer_sdk::client::Client;
 use indexer_sdk::configuration::base::{IndexerConfiguration, NetConfiguration, ZMQConfiguration};
-use indexer_sdk::factory::common::sync_create_and_start_processor;
+use indexer_sdk::factory::common::{
+  async_create_and_start_processor, sync_create_and_start_processor,
+};
 use indexer_sdk::storage::db::memory::MemoryDB;
 use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
@@ -43,6 +45,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{atomic, Arc};
 use std::{panic, thread};
+use tokio::runtime;
 use tokio::runtime::Runtime;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -70,10 +73,11 @@ unsafe impl Sync for SimulatorServer {}
 impl SimulatorServer {
   pub async fn start(
     &self,
+    rt: Arc<Runtime>,
     exit: async_channel::Receiver<tokio::sync::oneshot::Sender<()>>,
   ) -> JoinHandle<()> {
     let internal = self.clone();
-    tokio::spawn(async move {
+    rt.spawn(async move {
       internal.on_start(exit).await;
     })
   }
@@ -89,7 +93,7 @@ impl SimulatorServer {
               }
               Err(e) => {
                   log::error!("receive event error: {:?}", e);
-                  break;
+                  continue;
               }
           }
        },
@@ -124,7 +128,7 @@ impl SimulatorServer {
       }
       ClientEvent::GetHeight => {
         let height = self.get_current_height()?;
-        self.client.report_height(height)?;
+        self.client.report_height(height).await?;
       }
       ClientEvent::TxDroped(tx) => {
         let tx = tx.clone().into();
@@ -218,7 +222,7 @@ impl SimulatorServer {
     Ok(true)
   }
   async fn get_client_event(&self) -> crate::Result<ClientEvent, SimulateError> {
-    let ret = self.client.block_get_event()?;
+    let ret = self.client.block_get_event().await?;
     Ok(ret)
   }
   pub fn execute_tx(
@@ -688,11 +692,19 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
     return None;
   }
 
+  let rt = Arc::new(Runtime::new().unwrap());
+
+  let ret = rt.block_on(async { do_start_simulator(ops, internal.clone()).await });
+  return ret;
+}
+
+async fn do_start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorServer> {
+  let rt = Arc::new(Runtime::new().unwrap());
   let zmq_url = ops.simulate_zmq_url.clone().unwrap();
   let sim_rpc = ops.simulate_bitcoin_rpc_url.clone().unwrap();
   let sim_user = ops.simulate_bitcoin_rpc_user.clone().unwrap();
   let sim_pass = ops.simulate_bitcoin_rpc_pass.clone().unwrap();
-  let rx = ops.rx.clone().unwrap();
+  let notify_rx = ops.rx.clone().unwrap();
 
   let config = IndexerConfiguration {
     mq: ZMQConfiguration {
@@ -706,16 +718,24 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
     },
     ..Default::default()
   };
-  let rt = Runtime::new().unwrap();
-  let client = sync_create_and_start_processor(config.clone());
+
+  let (tx, rx) = watch::channel(());
+  let (client, mut handlers) =
+    async_create_and_start_processor(rx.clone(), config.clone(), rt.clone()).await;
+
   let server = SimulatorServer::new(ops.simulate_index.unwrap(), internal.clone(), client).unwrap();
   let start_server = server.clone();
+  handlers.push(start_server.start(rt.clone(), notify_rx.clone()).await);
   thread::spawn(move || {
     rt.block_on(async {
-      let handler = start_server.start(rx.clone()).await;
-      handler.await.unwrap();
+      wait_exit_signal().await.unwrap();
+      tx.send(()).unwrap();
+      for h in handlers {
+        h.await.unwrap();
+      }
     });
   });
+
   Some(server)
 }
 
