@@ -100,7 +100,8 @@ impl<'index> Updater<'_> {
     let mut uncommitted = 0;
     let mut tx_out_cache = SimpleLru::new(self.index.options.lru_size);
     while let Ok(block) = rx.recv() {
-
+      let start=Instant::now();
+      info!("start to index block");
       let latest_height = self.index.client.get_block_count()?;
 
       unsafe {
@@ -161,6 +162,7 @@ impl<'index> Updater<'_> {
       if SHUTTING_DOWN.load(atomic::Ordering::Relaxed) {
         break;
       }
+      info!("end to index block,cost:{:?}s",start.elapsed().as_secs());
     }
 
     if uncommitted > 0 {
@@ -252,7 +254,7 @@ impl<'index> Updater<'_> {
             return Err(err);
           }
 
-          thread::sleep(Duration::from_secs(seconds));
+          thread::sleep(Duration::from_secs(1));
         }
         Ok(result) => return Ok(result),
       }
