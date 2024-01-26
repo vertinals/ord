@@ -274,6 +274,7 @@ fn wait_pending_shutdown(enable_pending: bool, tx: async_channel::Sender<tokio::
     info!("pending enbale,begin to send exit signal to pending thread");
     let _ = tx.send_blocking(notify_tx);
     let _ = notify_rx.blocking_recv();
+    info!("pending thread shutdown successfully");
   } else {
     info!("pending disable");
   }

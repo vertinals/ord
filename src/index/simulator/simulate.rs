@@ -71,17 +71,13 @@ unsafe impl Send for SimulatorServer {}
 unsafe impl Sync for SimulatorServer {}
 
 impl SimulatorServer {
-  pub async fn start(
-    &self,
-    rt: Arc<Runtime>,
-    exit: async_channel::Receiver<tokio::sync::oneshot::Sender<()>>,
-  ) -> JoinHandle<()> {
+  pub async fn start(&self, rt: Arc<Runtime>, exit: watch::Receiver<()>) -> JoinHandle<()> {
     let internal = self.clone();
     rt.spawn(async move {
       internal.on_start(exit).await;
     })
   }
-  async fn on_start(self, mut exit: async_channel::Receiver<tokio::sync::oneshot::Sender<()>>) {
+  async fn on_start(self, mut exit: watch::Receiver<()>) {
     loop {
       tokio::select! {
        event=self.get_client_event()=>{
@@ -97,16 +93,9 @@ impl SimulatorServer {
               }
           }
        },
-       notify = exit.recv() => {
-             if notify.is_ok(){
-                 log::info!("simulator receive exit signal, exit.");
-                 let notify=notify.unwrap();
-                 let _=notify.send(());
-                 break;
-             }else{
-                error!("receive error notify ,simulator receive exit signal, exit. ,");
-                break;
-           }
+       _ = exit.changed() => {
+              log::info!("simulator receive exit signal");
+              break;
          }
       }
     }
@@ -725,13 +714,18 @@ async fn do_start_simulator(ops: Options, internal: Arc<Index>) -> Option<Simula
 
   let server = SimulatorServer::new(ops.simulate_index.unwrap(), internal.clone(), client).unwrap();
   let start_server = server.clone();
-  handlers.push(start_server.start(rt.clone(), notify_rx.clone()).await);
+  handlers.push(start_server.start(rt.clone(), rx.clone()).await);
   thread::spawn(move || {
     rt.block_on(async {
       wait_exit_signal().await.unwrap();
       tx.send(()).unwrap();
       for h in handlers {
-        h.await.unwrap();
+        let _=h.await;
+      }
+      let ret = notify_rx.recv().await;
+      if ret.is_ok() {
+        let ret = ret.unwrap();
+        let _ = ret.send(());
       }
     });
   });
