@@ -10,8 +10,9 @@
   clippy::cast_sign_loss
 )]
 
-use std::thread::sleep;
+use async_channel::Sender;
 use log::info;
+use std::thread::sleep;
 use tokio::sync::watch;
 use {
   self::{
@@ -237,15 +238,6 @@ pub fn main() {
       .unwrap()
       .iter()
       .for_each(|handle| handle.graceful_shutdown(Some(Duration::from_millis(100))));
-
-    let (notify_tx, notify_rx) = tokio::sync::oneshot::channel();
-    if enable_pending {
-      info!("pending enbale,begin to send exit signal to pending thread");
-      let _ = tx.send_blocking(notify_tx);
-      let _ = notify_rx.blocking_recv();
-    }else{
-      info!("pending disable");
-    }
   })
   .expect("Error setting <CTRL-C> handler");
 
@@ -266,6 +258,7 @@ pub fn main() {
       }
 
       gracefully_shutdown_indexer();
+      wait_pending_shutdown(enable_pending,tx);
 
       process::exit(1);
     }
@@ -273,5 +266,15 @@ pub fn main() {
   }
 
   gracefully_shutdown_indexer();
-
+  wait_pending_shutdown(enable_pending,tx);
+}
+fn wait_pending_shutdown(enable_pending: bool, tx: async_channel::Sender<tokio::sync::oneshot::Sender<()>>) {
+  let (notify_tx, notify_rx) = tokio::sync::oneshot::channel();
+  if enable_pending {
+    info!("pending enbale,begin to send exit signal to pending thread");
+    let _ = tx.send_blocking(notify_tx);
+    let _ = notify_rx.blocking_recv();
+  } else {
+    info!("pending disable");
+  }
 }
