@@ -210,7 +210,7 @@ impl Server {
         if let Err(error) = index_clone.update() {
           log::warn!("Updating index: {error}");
         }
-        thread::sleep(Duration::from_millis(500));
+        thread::sleep(Duration::from_secs(5));
       });
       INDEXER.lock().unwrap().replace(index_thread);
       let client = Arc::new(

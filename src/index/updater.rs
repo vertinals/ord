@@ -254,7 +254,7 @@ impl<'index> Updater<'_> {
             return Err(err);
           }
 
-          thread::sleep(Duration::from_secs(1));
+          thread::sleep(Duration::from_secs(seconds));
         }
         Ok(result) => return Ok(result),
       }
