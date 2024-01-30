@@ -99,8 +99,10 @@ fn check(tx_id: &str, url: &String) -> anyhow::Result<(bool, bool)> {
             let json = serde_json::to_string(&receipt).unwrap();
             let str = format!("{}:{}", tx_id, json);
             write_tx_id_to_file(str.as_str());
+        }else {
+            println!("{} is correct", tx_id);
         }
-        println!("{} is correct", tx_id);
+
         return Ok(result);
     }
     println!("{} query error", tx_id);
