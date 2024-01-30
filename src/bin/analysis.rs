@@ -88,7 +88,7 @@ fn check(tx_id: &str, url: &String) -> anyhow::Result<(bool, bool)> {
                 break;
             }
 
-            if equal(&receipt, pending_map.get(&receipt.inscription_id).unwrap()) {
+            if !equal(&receipt, pending_map.get(&receipt.inscription_id).unwrap()) {
                 println!("{} err: inscription not equal", receipt.inscription_id);
                 result.0 = false;
                 break;
@@ -100,6 +100,7 @@ fn check(tx_id: &str, url: &String) -> anyhow::Result<(bool, bool)> {
             let str = format!("{}:{}", tx_id, json);
             write_tx_id_to_file(str.as_str());
         }
+        println!("{} is correct", tx_id);
         return Ok(result);
     }
     println!("{} query error", tx_id);
