@@ -84,13 +84,10 @@ impl<'a, 'db, 'txn> Brc20Reader for SimulateContext<'a, 'db, 'txn> {
       let v = simulate_balances
         .entry(node.tick.clone())
         .or_insert(node.clone());
-      v.transferable_balance = v.transferable_balance + node.transferable_balance;
-      v.overall_balance = v.overall_balance + node.overall_balance;
+      v.transferable_balance += node.transferable_balance;
+      v.overall_balance += node.overall_balance
     }
-    let ret = simulate_balances
-      .into_iter()
-      .map(|(_, v)| v.clone())
-      .collect();
+    let ret = simulate_balances.into_values().collect();
     Ok(ret)
   }
 
@@ -134,7 +131,7 @@ impl<'a, 'db, 'txn> Brc20Reader for SimulateContext<'a, 'db, 'txn> {
         token_map.insert(node.tick.clone(), node.clone());
       }
     }
-    let ret = token_map.into_iter().map(|(_, v)| v).collect();
+    let ret = token_map.into_values().collect();
     Ok(ret)
   }
 
@@ -144,16 +141,16 @@ impl<'a, 'db, 'txn> Brc20Reader for SimulateContext<'a, 'db, 'txn> {
     let ret = get_transaction_receipts(table, txid)?;
     let mut simulate_receipts = ret
       .into_iter()
-      .map(|v| (v.inscription_id.clone(), v))
+      .map(|v| (v.inscription_id, v))
       .collect::<HashMap<InscriptionId, Receipt>>();
     let internal =
       self.use_internal_table(BRC20_EVENTS, |table| get_transaction_receipts(&table, txid))?;
     for node in internal {
-      if !simulate_receipts.contains_key(&node.inscription_id) {
-        simulate_receipts.insert(node.inscription_id.clone(), node.clone());
-      }
+      simulate_receipts
+        .entry(node.inscription_id)
+        .or_insert_with(|| node.clone());
     }
-    let ret = simulate_receipts.into_iter().map(|(_, v)| v).collect();
+    let ret = simulate_receipts.into_values().collect();
     Ok(ret)
   }
 
@@ -166,17 +163,17 @@ impl<'a, 'db, 'txn> Brc20Reader for SimulateContext<'a, 'db, 'txn> {
     let ret = get_transferable(table, script)?;
     let mut simulate_transferable = ret
       .into_iter()
-      .map(|v| (v.inscription_id.clone(), v))
+      .map(|v| (v.inscription_id, v))
       .collect::<HashMap<InscriptionId, TransferableLog>>();
     let internal = self.use_internal_table(BRC20_TRANSFERABLELOG, |table| {
       get_transferable(&table, script)
     })?;
     for node in internal {
-      if !simulate_transferable.contains_key(&node.inscription_id) {
-        simulate_transferable.insert(node.inscription_id.clone(), node.clone());
-      }
+      simulate_transferable
+        .entry(node.inscription_id)
+        .or_insert_with(|| node.clone());
     }
-    let ret = simulate_transferable.into_iter().map(|(_, v)| v).collect();
+    let ret = simulate_transferable.into_values().collect();
     Ok(ret)
   }
 
@@ -190,17 +187,17 @@ impl<'a, 'db, 'txn> Brc20Reader for SimulateContext<'a, 'db, 'txn> {
     let ret = get_transferable_by_tick(table, script, tick)?;
     let mut simulate_transferable = ret
       .into_iter()
-      .map(|v| (v.inscription_id.clone(), v))
+      .map(|v| (v.inscription_id, v))
       .collect::<HashMap<InscriptionId, TransferableLog>>();
     let internal = self.use_internal_table(BRC20_TRANSFERABLELOG, |table| {
       get_transferable_by_tick(&table, script, tick)
     })?;
     for node in internal {
-      if !simulate_transferable.contains_key(&node.inscription_id) {
-        simulate_transferable.insert(node.inscription_id.clone(), node.clone());
-      }
+      simulate_transferable
+        .entry(node.inscription_id)
+        .or_insert_with(|| node.clone());
     }
-    let ret = simulate_transferable.into_iter().map(|(_, v)| v).collect();
+    let ret = simulate_transferable.into_values().collect();
     Ok(ret)
   }
 
@@ -346,7 +343,7 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for SimulateContext<'a, 'db, 'txn> {
   ) -> crate::Result<(), Self::Error> {
     let mut traces = self.traces.borrow_mut();
     let key = &inscription_id.store();
-    let key = InscriptionIdValue::as_bytes(&key);
+    let key = InscriptionIdValue::as_bytes(key);
     traces.push(TraceNode {
       trace_type: CacheTableIndex::BRC20_INSCRIBE_TRANSFER,
       key,
@@ -459,10 +456,10 @@ impl<'a, 'db, 'txn> OrdReader for SimulateContext<'a, 'db, 'txn> {
         return Ok(ScriptKey::from_script(&ret.script_pubkey, network));
       }
     }
-    return Err(anyhow!(
+    Err(anyhow!(
       "failed to get tx out! error: outpoint {} not found",
       &satpoint.outpoint
-    ));
+    ))
   }
 
   fn get_transaction_operations(
@@ -474,7 +471,7 @@ impl<'a, 'db, 'txn> OrdReader for SimulateContext<'a, 'db, 'txn> {
     let simulate = get_transaction_operations(table, txid)?;
     let mut simulate_operations: HashMap<InscriptionId, InscriptionOp> = simulate
       .into_iter()
-      .map(|v| (v.inscription_id.clone(), v.clone()))
+      .map(|v| (v.inscription_id, v.clone()))
       .collect();
     let internal = self.use_internal_table(BRC20_EVENTS, |table| {
       get_transaction_operations(&table, txid)
@@ -483,9 +480,9 @@ impl<'a, 'db, 'txn> OrdReader for SimulateContext<'a, 'db, 'txn> {
       if simulate_operations.contains_key(&node.inscription_id) {
         continue;
       }
-      simulate_operations.insert(node.inscription_id.clone(), node.clone());
+      simulate_operations.insert(node.inscription_id, node.clone());
     }
-    let ret = simulate_operations.into_iter().map(|(_, v)| v).collect();
+    let ret = simulate_operations.into_values().collect();
     Ok(ret)
   }
 
@@ -511,7 +508,7 @@ impl<'a, 'db, 'txn> OrdReader for SimulateContext<'a, 'db, 'txn> {
     if simulate.is_empty() {
       return Ok(None);
     }
-    return Ok(Some(simulate));
+    Ok(Some(simulate))
   }
 
   fn get_collection_inscription_id(
@@ -536,7 +533,7 @@ impl<'a, 'db, 'txn> ContextTrait for SimulateContext<'a, 'db, 'txn> {
   }
 
   fn network(&self) -> Network {
-    self.network.clone()
+    self.network
   }
 
   fn block_time(&self) -> u32 {
@@ -552,7 +549,6 @@ impl<'a, 'db, 'txn> SimulateContext<'a, 'db, 'txn> {
   ) -> crate::Result<T> {
     let rtx = self.internal_index.internal.begin_read()?;
     let table = rtx.0.open_table(table_def)?;
-    let ret = f(table);
-    ret
+    f(table)
   }
 }

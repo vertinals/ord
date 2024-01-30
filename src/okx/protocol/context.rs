@@ -278,7 +278,7 @@ impl<'a, 'db, 'txn> ContextTrait for Context<'a, 'db, 'txn> {
   }
 
   fn network(&self) -> Network {
-    self.chain.network.clone()
+    self.chain.network
   }
 
   fn block_time(&self) -> u32 {

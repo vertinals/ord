@@ -249,22 +249,14 @@ impl SimulatorServer {
       .get_block_by_height(height)?
       .unwrap();
     let home_inscriptions = wtx.open_table(HOME_INSCRIPTIONS)?;
-    let inscription_id_to_sequence_number =
-      wtx.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER)?;
-    let inscription_number_to_sequence_number = wtx
-      .open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER)
-      ?;
+    let inscription_id_to_sequence_number = wtx.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER)?;
+    let inscription_number_to_sequence_number =
+      wtx.open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER)?;
     let sat_to_sequence_number = wtx.open_multimap_table(SAT_TO_SEQUENCE_NUMBER)?;
-    let satpoint_to_sequence_number = wtx
-      .open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER)
-      ?;
-    let sequence_number_to_children = wtx
-      .open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN)
-      ?;
+    let satpoint_to_sequence_number = wtx.open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER)?;
+    let sequence_number_to_children = wtx.open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN)?;
     let sequence_number_to_inscription_entry = Rc::new(RefCell::new(
-      wtx
-        .open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)
-        ?,
+      wtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)?,
     ));
     let sequence_number_to_satpoint = wtx.open_table(SEQUENCE_NUMBER_TO_SATPOINT)?;
     let transaction_id_to_transaction = wtx.open_table(TRANSACTION_ID_TO_TRANSACTION)?;
@@ -305,7 +297,7 @@ impl SimulatorServer {
 
     let db_receipts = ctx.get_transaction_receipts(&tx.txid())?;
     let operations = ctx.get_transaction_operations(&tx.txid())?;
-    if db_receipts.len() > 0 || operations.len() > 0 {
+    if !db_receipts.is_empty() || !operations.is_empty() {
       ret.ord_operations = operations;
       ret.brc20_receipts = db_receipts;
       info!("tx:{:?} already simulated", tx.txid());
@@ -361,7 +353,7 @@ impl SimulatorServer {
       error!("simulate tx:{:?} depth:{:?} over 20", tx.txid(), depth);
       return Err(SimulateError::StackOverFlow);
     }
-    *depth = *depth + 1;
+    *depth += 1;
     let tx_id = tx.txid();
     let mut need_handle_first = vec![];
     for input in &tx.input {
@@ -692,7 +684,7 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
   let rt = Arc::new(Runtime::new().unwrap());
 
   let ret = rt.block_on(async { do_start_simulator(ops, internal.clone()).await });
-  return ret;
+  ret
 }
 
 async fn do_start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorServer> {
@@ -744,6 +736,7 @@ async fn do_start_simulator(ops: Options, internal: Arc<Index>) -> Option<Simula
 mod tests {
   use super::*;
   use bitcoincore_rpc::RpcApi;
+  use indexer_sdk::client::SyncClient;
   use indexer_sdk::factory::common::new_client_for_test;
   use log::LevelFilter;
   use std::path::PathBuf;
@@ -815,6 +808,8 @@ mod tests {
       simulate_bitcoin_rpc_user: Some("bitcoinrpc".to_string()),
       simulate_index: Some("./simulate".to_string().into()),
       rx: None,
+      commit_height_interval: 0,
+      commit_persist_interval: 0,
     };
     opt
   }

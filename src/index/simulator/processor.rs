@@ -38,8 +38,7 @@ impl IndexWrapper {
   ) -> crate::Result<T> {
     let rtx = self.internal.begin_read()?;
     let table = rtx.0.open_table(table_def)?;
-    let ret = f(table);
-    ret
+    f(table)
   }
   pub fn new(internal: Arc<Index>) -> Self {
     Self { internal }
@@ -83,7 +82,7 @@ unsafe impl<'a, 'db, 'tx> Sync for StorageProcessor<'a, 'db, 'tx> {}
 impl<'a, 'db, 'tx> StorageProcessor<'a, 'db, 'tx> {
   pub fn get_transaction(&self, tx_id: &Txid) -> crate::Result<Option<Transaction>> {
     let client = self.client.as_ref().unwrap();
-    let ret = client.get_transaction_by_tx_id(tx_id.clone())?;
+    let ret = client.get_transaction_by_tx_id(*tx_id)?;
     Ok(ret)
   }
   pub fn create_context(&self) -> crate::Result<SimulateContext<'a, 'db, 'tx>> {

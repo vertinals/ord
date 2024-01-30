@@ -109,6 +109,14 @@ pub struct Options {
 
   #[clap(skip)]
   pub rx: Option<async_channel::Receiver<tokio::sync::oneshot::Sender<()>>>,
+  #[clap(long, default_value = "200", help = "DB commit interval.")]
+  pub(crate) commit_height_interval: u64,
+  #[clap(
+    long,
+    default_value = "0",
+    help = "(experimental) DB commit persist interval."
+  )]
+  pub(crate) commit_persist_interval: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -334,6 +342,22 @@ impl Options {
     }
 
     Ok(client)
+  }
+
+  pub(crate) fn commit_height_interval(&self) -> u64 {
+    if self.commit_height_interval == 0 {
+      1
+    } else {
+      self.commit_height_interval
+    }
+  }
+
+  pub(crate) fn commit_persist_interval(&self) -> u64 {
+    if self.commit_persist_interval == 0 {
+      1
+    } else {
+      self.commit_persist_interval
+    }
   }
 }
 

@@ -23,6 +23,7 @@ pub(super) struct Flotsam {
   pub origin: Origin,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum Origin {
   New {
@@ -636,11 +637,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     } else {
       new_satpoint.store()
     };
-    let transfer_to_coin_base = if new_satpoint.outpoint.txid == flotsam.txid {
-      false
-    } else {
-      true
-    };
+    let transfer_to_coin_base = new_satpoint.outpoint.txid != flotsam.txid;
     self
       .operations
       .entry(flotsam.txid)
