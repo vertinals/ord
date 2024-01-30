@@ -3,7 +3,6 @@ use std::env;
 use std::fs::{OpenOptions, read_to_string};
 use std::io::Write;
 use bitcoin::Txid;
-use hyper::ext::HashMap;
 use reqwest::blocking;
 
 use serde::{Deserialize, Serialize};
@@ -78,7 +77,7 @@ fn check(tx_id: &str, url: &String) -> anyhow::Result<(bool, bool)> {
 
 
 
-        let pending_map = receipt.pending.iter().map(|x|(x.inscription_id,x.clone()).collect::<HashMap<InscriptionId, Receipt>>();
+        let pending_map = receipt.pending.iter().map(|x|(x.inscription_id,x.clone())).collect::<HashMap<InscriptionId, Receipt>>();
 
         let mut result = (true, true);
 
@@ -101,7 +100,7 @@ fn check(tx_id: &str, url: &String) -> anyhow::Result<(bool, bool)> {
             let str = format!("{}:{}", tx_id, json);
             write_tx_id_to_file(str.as_str());
         }
-        Ok(result)
+        return Ok(result);
     }
     println!("{} query error", tx_id);
     return Ok((false,false));
