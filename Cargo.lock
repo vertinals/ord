@@ -1911,7 +1911,7 @@ dependencies = [
 [[package]]
 name = "indexer-sdk"
 version = "0.1.0"
-source = "git+https://github.com/ItsFunny/indexer-sdk.git#855079394cd5331996532f7fc06377ab55dc3a82"
+source = "git+https://github.com/okx/indexer-sdk.git?rev=34e6e7bfc8c0d3db41e2867f71428859396407b0#34e6e7bfc8c0d3db41e2867f71428859396407b0"
 dependencies = [
  "async-channel 1.9.0",
  "async-trait",
@@ -2638,6 +2638,7 @@ name = "ord"
 version = "0.14.1"
 dependencies = [
  "anyhow",
+ "async-channel 1.9.0",
  "async-trait",
  "axum",
  "axum-server",

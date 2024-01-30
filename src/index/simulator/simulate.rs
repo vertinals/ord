@@ -26,9 +26,9 @@ use anyhow::anyhow;
 use bitcoin::{Block, OutPoint, Transaction, TxOut, Txid};
 use indexer_sdk::client::drect::DirectClient;
 use indexer_sdk::client::event::ClientEvent;
-use indexer_sdk::client::SyncClient;
+use indexer_sdk::client::Client;
 use indexer_sdk::configuration::base::{IndexerConfiguration, NetConfiguration, ZMQConfiguration};
-use indexer_sdk::factory::common::sync_create_and_start_processor;
+use indexer_sdk::factory::common::async_create_and_start_processor;
 use indexer_sdk::storage::db::memory::MemoryDB;
 use indexer_sdk::storage::db::thread_safe::ThreadSafeDB;
 use indexer_sdk::storage::kv::KVStorageProcessor;
@@ -69,33 +69,33 @@ unsafe impl Send for SimulatorServer {}
 unsafe impl Sync for SimulatorServer {}
 
 impl SimulatorServer {
-  pub async fn start(&self, exit: watch::Receiver<()>) -> JoinHandle<()> {
+  pub async fn start(&self, rt: Arc<Runtime>, exit: watch::Receiver<()>) -> JoinHandle<()> {
     let internal = self.clone();
-    tokio::spawn(async move {
+    rt.spawn(async move {
       internal.on_start(exit).await;
     })
   }
   async fn on_start(self, mut exit: watch::Receiver<()>) {
     loop {
       tokio::select! {
-          event=self.get_client_event()=>{
-              match event{
-                 Ok(event) => {
-                     if let Err(e)= self.handle_event(&event).await{
-                             log::error!("handle event error: {:?}", e);
-                     }
-                 }
-                 Err(e) => {
-                     log::error!("receive event error: {:?}", e);
-                     break;
-                 }
-             }
-          },
-          _ = exit.changed() => {
-         info!("simulator receive exit signal, exit.");
-         break;
-      }
+       event=self.get_client_event()=>{
+           match event{
+              Ok(event) => {
+                  if let Err(e)= self.handle_event(&event).await{
+                          log::error!("handle event error: {:?}", e);
+                  }
+              }
+              Err(e) => {
+                  log::error!("receive event error: {:?}", e);
+                  continue;
+              }
+          }
+       },
+       _ = exit.changed() => {
+              log::info!("simulator receive exit signal");
+              break;
          }
+      }
     }
   }
 
@@ -115,7 +115,7 @@ impl SimulatorServer {
       }
       ClientEvent::GetHeight => {
         let height = self.get_current_height()?;
-        self.client.report_height(height)?;
+        self.client.report_height(height).await?;
       }
       ClientEvent::TxDroped(tx) => {
         let tx = tx.clone().into();
@@ -209,7 +209,7 @@ impl SimulatorServer {
     Ok(true)
   }
   async fn get_client_event(&self) -> crate::Result<ClientEvent, SimulateError> {
-    let ret = self.client.block_get_event()?;
+    let ret = self.client.block_get_event().await?;
     Ok(ret)
   }
   pub fn execute_tx(
@@ -679,10 +679,19 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
     return None;
   }
 
+  let rt = Arc::new(Runtime::new().unwrap());
+
+  let ret = rt.block_on(async { do_start_simulator(ops, internal.clone()).await });
+  return ret;
+}
+
+async fn do_start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorServer> {
+  let rt = Arc::new(Runtime::new().unwrap());
   let zmq_url = ops.simulate_zmq_url.clone().unwrap();
   let sim_rpc = ops.simulate_bitcoin_rpc_url.clone().unwrap();
   let sim_user = ops.simulate_bitcoin_rpc_user.clone().unwrap();
   let sim_pass = ops.simulate_bitcoin_rpc_pass.clone().unwrap();
+  let notify_rx = ops.rx.clone().unwrap();
 
   let config = IndexerConfiguration {
     mq: ZMQConfiguration {
@@ -696,22 +705,31 @@ pub fn start_simulator(ops: Options, internal: Arc<Index>) -> Option<SimulatorSe
     },
     ..Default::default()
   };
-  let rt = Runtime::new().unwrap();
-  let client = sync_create_and_start_processor(config.clone());
+
   let (tx, rx) = watch::channel(());
+  let (client, mut handlers) =
+    async_create_and_start_processor(rx.clone(), config.clone(), rt.clone()).await;
+
   let server = SimulatorServer::new(ops.simulate_index.unwrap(), internal.clone(), client).unwrap();
   let start_server = server.clone();
+  handlers.push(start_server.start(rt.clone(), rx.clone()).await);
   thread::spawn(move || {
     rt.block_on(async {
-      let handler = start_server.start(rx.clone()).await;
       wait_exit_signal().await.unwrap();
       tx.send(()).unwrap();
-      handler.await.unwrap();
+      for h in handlers {
+        let _ = h.await;
+      }
+      let ret = notify_rx.recv().await;
+      if ret.is_ok() {
+        let ret = ret.unwrap();
+        let _ = ret.send(());
+      }
     });
   });
+
   Some(server)
 }
-
 #[cfg(test)]
 mod tests {
   use super::*;

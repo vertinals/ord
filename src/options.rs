@@ -106,6 +106,9 @@ pub struct Options {
   pub(crate) simulate_bitcoin_rpc_user: Option<String>,
   #[arg(long, help = "Simulate Use index at <INDEX>.")]
   pub(crate) simulate_index: Option<PathBuf>,
+
+  #[clap(skip)]
+  pub rx: Option<async_channel::Receiver<tokio::sync::oneshot::Sender<()>>>,
 }
 
 #[derive(Debug, Clone)]
