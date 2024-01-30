@@ -25,7 +25,6 @@ fn main() {
     let tx_ids: Vec<&str> = data.split('\n').filter(|x|x.len() > 0).collect();
     let mut hit = 0;
     let mut right = 0;
-    let mut sum = 0;
     let mut total = tx_ids.len();
     for id in tx_ids {
         if id.len() != 66 {
@@ -35,12 +34,8 @@ fn main() {
         }
         match check(&id[2..], rpc_url) {
             Ok(ret) => {
-                sum += 1;
                 if ret.0 {
                     right += 1;
-                    println!("{}",id)
-                } else {
-                    write_tx_id_to_file(id);
                 }
 
                 if ret.1 {
