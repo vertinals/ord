@@ -1,7 +1,6 @@
 use crate::index::simulator::simulate::{start_simulator, SimulatorServer};
 use crate::okx::datastore::brc20::Receipt;
 use crate::okx::datastore::ord::InscriptionOp;
-use crate::subcommand::server::ord::OrdInscription;
 use bitcoincore_rpc::Auth;
 use {
   self::{

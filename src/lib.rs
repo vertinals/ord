@@ -236,7 +236,9 @@ pub fn main() {
   })
   .expect("Error setting <CTRL-C> handler");
 
-  match Arguments::parse().run() {
+  let mut server = Arguments::parse();
+  server.options.rx = Some(rx);
+  match server.run() {
     Err(err) => {
       eprintln!("error: {err}");
       err

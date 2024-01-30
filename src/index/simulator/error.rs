@@ -21,4 +21,7 @@ pub enum SimulateError {
 
   #[error("transaction failed: {0}")]
   TransactionError(#[from] redb::TransactionError),
+
+  #[error("over flow")]
+  StackOverFlow,
 }

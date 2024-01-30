@@ -25,7 +25,6 @@ use crate::okx::protocol::{BlockContext, ContextTrait};
 use crate::SatPoint;
 use anyhow::anyhow;
 use bitcoin::{Network, OutPoint, TxOut, Txid};
-use log::info;
 use redb::Table;
 
 #[allow(non_snake_case)]
@@ -232,10 +231,6 @@ impl<'a, 'db, 'txn> Brc20ReaderWriter for Context<'a, 'db, 'txn> {
     txid: &Txid,
     receipt: &[Receipt],
   ) -> crate::Result<(), Self::Error> {
-    info!(
-      "save transaction receipts: txid: {}, receipt: {:?}",
-      txid, receipt
-    );
     save_transaction_receipts(self.BRC20_EVENTS, txid, receipt)
   }
 

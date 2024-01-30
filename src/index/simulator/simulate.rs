@@ -248,30 +248,30 @@ impl SimulatorServer {
       .internal
       .get_block_by_height(height)?
       .unwrap();
-    let home_inscriptions = wtx.open_table(HOME_INSCRIPTIONS).unwrap();
+    let home_inscriptions = wtx.open_table(HOME_INSCRIPTIONS)?;
     let inscription_id_to_sequence_number =
-      wtx.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER).unwrap();
+      wtx.open_table(INSCRIPTION_ID_TO_SEQUENCE_NUMBER)?;
     let inscription_number_to_sequence_number = wtx
       .open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER)
-      .unwrap();
-    let sat_to_sequence_number = wtx.open_multimap_table(SAT_TO_SEQUENCE_NUMBER).unwrap();
+      ?;
+    let sat_to_sequence_number = wtx.open_multimap_table(SAT_TO_SEQUENCE_NUMBER)?;
     let satpoint_to_sequence_number = wtx
       .open_multimap_table(SATPOINT_TO_SEQUENCE_NUMBER)
-      .unwrap();
+      ?;
     let sequence_number_to_children = wtx
       .open_multimap_table(SEQUENCE_NUMBER_TO_CHILDREN)
-      .unwrap();
+      ?;
     let sequence_number_to_inscription_entry = Rc::new(RefCell::new(
       wtx
         .open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)
-        .unwrap(),
+        ?,
     ));
-    let sequence_number_to_satpoint = wtx.open_table(SEQUENCE_NUMBER_TO_SATPOINT).unwrap();
-    let transaction_id_to_transaction = wtx.open_table(TRANSACTION_ID_TO_TRANSACTION).unwrap();
-    let outpoint_to_entry = Rc::new(RefCell::new(wtx.open_table(OUTPOINT_TO_ENTRY).unwrap()));
-    let outpoint_to_sat_ranges = wtx.open_table(OUTPOINT_TO_SAT_RANGES).unwrap();
-    let sat_to_point = wtx.open_table(SAT_TO_SATPOINT).unwrap();
-    let statis_to_count = wtx.open_table(STATISTIC_TO_COUNT).unwrap();
+    let sequence_number_to_satpoint = wtx.open_table(SEQUENCE_NUMBER_TO_SATPOINT)?;
+    let transaction_id_to_transaction = wtx.open_table(TRANSACTION_ID_TO_TRANSACTION)?;
+    let outpoint_to_entry = Rc::new(RefCell::new(wtx.open_table(OUTPOINT_TO_ENTRY)?));
+    let outpoint_to_sat_ranges = wtx.open_table(OUTPOINT_TO_SAT_RANGES)?;
+    let sat_to_point = wtx.open_table(SAT_TO_SATPOINT)?;
+    let statis_to_count = wtx.open_table(STATISTIC_TO_COUNT)?;
     let traces_table = wtx.open_table(SIMULATE_TRACE_TABLE)?;
 
     let h = height;
@@ -337,7 +337,8 @@ impl SimulatorServer {
       context: ctx,
     };
 
-    self.loop_simulate_tx(h, &block, &processor, &tx)?;
+    let mut depth = 0;
+    self.loop_simulate_tx(h, &block, &processor, &tx, &mut depth)?;
 
     let receipts = brc20_receipts.borrow();
     let receipts = receipts.deref().clone();
@@ -354,7 +355,13 @@ impl SimulatorServer {
     block: &Block,
     processor: &StorageProcessor,
     tx: &Transaction,
+    depth: &mut i32,
   ) -> crate::Result<(), SimulateError> {
+    if *depth >= 20 {
+      error!("simulate tx:{:?} depth:{:?} over 20", tx.txid(), depth);
+      return Err(SimulateError::StackOverFlow);
+    }
+    *depth = *depth + 1;
     let tx_id = tx.txid();
     let mut need_handle_first = vec![];
     for input in &tx.input {
@@ -384,7 +391,7 @@ impl SimulatorServer {
         "parent tx :{:?},exist,but not in utxo data,child_hash:{:?},need to simulate parent tx",
         &parent, &tx_id
       );
-      self.loop_simulate_tx(h, block, processor, &parent_tx)?;
+      self.loop_simulate_tx(h, block, processor, &parent_tx, depth)?;
       if index == need_handle_first.len() - 1 {
         info!(
           "all parent txs {:?} simulate done,start to simulate child_hash:{:?}",
@@ -475,7 +482,6 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
         .iter()
         .map(|(_, txid)| txid)
         .collect::<HashSet<_>>();
-      use rayon::prelude::*;
       let mut tx_outs = Vec::new();
       for (tx, _) in block.txdata.iter() {
         for input in tx.input.iter() {
@@ -489,7 +495,7 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
           } else if tx_out_cache.contains(&prev_output) {
             cache_outputs_count.fetch_add(1, Ordering::Relaxed);
             continue;
-          } else if let Some(txout) = processor.get_txout_by_outpoint(&prev_output).unwrap() {
+          } else if let Some(txout) = processor.get_txout_by_outpoint(&prev_output)? {
             miss_outputs_count.fetch_add(1, Ordering::Relaxed);
             tx_outs.push((prev_output, Some(txout)));
           } else {
@@ -502,7 +508,11 @@ impl<'a, 'db, 'tx> Simulator<'a, 'db, 'tx> {
         if let Some(tx_out) = value {
           tx_out_cache.insert(out_point, tx_out);
         } else {
-          let tx = processor.get_transaction(&out_point.txid)?.unwrap();
+          let tx = processor.get_transaction(&out_point.txid)?;
+          if tx.is_none() {
+            return Err(anyhow!("missing transaction {}", out_point.txid.clone()));
+          }
+          let tx = tx.unwrap();
           let out = tx.output[out_point.vout as usize].clone();
           let tx_out = TxOut {
             value: out.value,
@@ -804,6 +814,7 @@ mod tests {
       simulate_bitcoin_rpc_pass: Some("bitcoinrpc".to_string()),
       simulate_bitcoin_rpc_user: Some("bitcoinrpc".to_string()),
       simulate_index: Some("./simulate".to_string().into()),
+      rx: None,
     };
     opt
   }
