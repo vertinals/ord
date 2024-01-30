@@ -117,7 +117,7 @@ fn equal(receipt: &Receipt, receipt2: &Receipt) -> bool {
         receipt.op == receipt2.op &&
         receipt.from == receipt2.from &&
         receipt.to == receipt2.to &&
-        receipt.result == receipt2.result;
+        ((receipt.result.is_ok() && receipt2.result.is_ok())||(receipt.result.is_err() && receipt2.result.is_ok()))
 }
 
 fn write_tx_id_to_file(txid: &str) -> anyhow::Result<()> {
