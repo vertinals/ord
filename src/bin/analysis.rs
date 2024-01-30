@@ -1,12 +1,14 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs::{OpenOptions, read_to_string};
 use std::io::Write;
 use bitcoin::Txid;
+use hyper::ext::HashMap;
 use reqwest::blocking;
 
 use serde::{Deserialize, Serialize};
 
-use ord::Receipt;
+use ord::{InscriptionId, Receipt};
 
 fn main() {
     // read from stdio
@@ -74,20 +76,32 @@ fn check(tx_id: &str, url: &String) -> anyhow::Result<(bool, bool)> {
             return Ok((false, false));
         }
 
-        println!("{} confirm len: {}, pending len: {}", tx_id, receipt.confirm.len(), receipt.pending.len());
-        if receipt.confirm.len() < receipt.pending.len() {
-            println!("{} right", tx_id);
-            return Ok((true, true));
-        }
 
 
-        let receip1 = &receipt.confirm[0];
-        let receip2 = &receipt.pending[0];
-        let ret = equal(receip1, receip2);
-        if ret {
-            println!("{} right", tx_id);
+        let pending_map = receipt.pending.iter().map(|x|(x.inscription_id,x.clone()).collect::<HashMap<InscriptionId, Receipt>>();
+
+        let mut result = (true, true);
+
+        for receipt in &receipt.confirm {
+            if !pending_map.contains_key(&receipt.inscription_id) {
+                println!("{} err: inscription not found in", receipt.inscription_id);
+                result.0 = false;
+                break;
+            }
+
+            if equal(&receipt, pending_map.get(&receipt.inscription_id).unwrap()) {
+                println!("{} err: inscription not equal", receipt.inscription_id);
+                result.0 = false;
+                break;
+            }
         }
-        return Ok((ret, true));
+
+        if !result.0 {
+            let json = serde_json::to_string(&receipt).unwrap();
+            let str = format!("{}:{}", tx_id, json);
+            write_tx_id_to_file(str.as_str());
+        }
+        Ok(result)
     }
     println!("{} query error", tx_id);
     return Ok((false,false));
