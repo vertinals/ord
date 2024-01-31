@@ -93,7 +93,7 @@ impl<'a, 'db, 'txn> OrdReader for Context<'a, 'db, 'txn> {
   fn get_transaction_operations(
     &self,
     txid: &Txid,
-  ) -> crate::Result<Vec<InscriptionOp>, Self::Error> {
+  ) -> crate::Result<Option<Vec<InscriptionOp>>, Self::Error> {
     get_transaction_operations(self.ORD_TX_TO_OPERATIONS, txid)
   }
 
@@ -165,7 +165,10 @@ impl<'a, 'db, 'txn> Brc20Reader for Context<'a, 'db, 'txn> {
     get_tokens_info(self.BRC20_TOKEN)
   }
 
-  fn get_transaction_receipts(&self, txid: &Txid) -> crate::Result<Vec<Receipt>, Self::Error> {
+  fn get_transaction_receipts(
+    &self,
+    txid: &Txid,
+  ) -> crate::Result<Option<Vec<Receipt>>, Self::Error> {
     get_transaction_receipts(self.BRC20_EVENTS, txid)
   }
 

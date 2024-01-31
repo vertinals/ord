@@ -28,7 +28,10 @@ pub trait OrdReader {
     network: Network,
   ) -> Result<ScriptKey, Self::Error>;
 
-  fn get_transaction_operations(&self, txid: &Txid) -> Result<Vec<InscriptionOp>, Self::Error>;
+  fn get_transaction_operations(
+    &self,
+    txid: &Txid,
+  ) -> Result<Option<Vec<InscriptionOp>>, Self::Error>;
 
   fn get_collections_of_inscription(
     &self,

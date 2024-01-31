@@ -9,7 +9,7 @@ use crate::okx::protocol::context::Context;
 use crate::{
   okx::{
     datastore::brc20::{
-      BRC20Error, Balance, DeployEvent, Event, InscripbeTransferEvent, MintEvent, Receipt, Tick,
+      BRC20Error, Balance, DeployEvent, Event, InscribeTransferEvent, MintEvent, Receipt, Tick,
       TokenInfo, TransferEvent, TransferInfo, TransferableLog,
     },
     protocol::brc20::{Message, Mint, Operation},
@@ -316,7 +316,7 @@ fn process_inscribe_transfer(
     )
     .map_err(Error::LedgerError)?;
 
-  Ok(Event::InscribeTransfer(InscripbeTransferEvent {
+  Ok(Event::InscribeTransfer(InscribeTransferEvent {
     tick: inscription.tick,
     amount: amt,
   }))

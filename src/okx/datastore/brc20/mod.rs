@@ -29,7 +29,7 @@ pub trait Brc20Reader {
   fn get_token_info(&self, tick: &Tick) -> Result<Option<TokenInfo>, Self::Error>;
   fn get_tokens_info(&self) -> Result<Vec<TokenInfo>, Self::Error>;
 
-  fn get_transaction_receipts(&self, txid: &Txid) -> Result<Vec<Receipt>, Self::Error>;
+  fn get_transaction_receipts(&self, txid: &Txid) -> Result<Option<Vec<Receipt>>, Self::Error>;
 
   fn get_transferable(&self, script: &ScriptKey) -> Result<Vec<TransferableLog>, Self::Error>;
   fn get_transferable_by_tick(

@@ -55,6 +55,7 @@ mod info;
 mod ord;
 mod response;
 mod types;
+mod utils;
 
 use self::api::*;
 use self::response::ApiResponse;
@@ -220,45 +221,45 @@ impl Server {
       ),
       components(schemas(
       // BRC20 schemas
-      brc20::TickInfo,
-      brc20::AllTickInfo,
-      brc20::Balance,
-      brc20::AllBalance,
-      brc20::TxEvent,
-      brc20::DeployEvent,
-      brc20::MintEvent,
-      brc20::InscribeTransferEvent,
-      brc20::TransferEvent,
-      brc20::ErrorEvent,
-      brc20::TxEvents,
-      brc20::BlockEvents,
+      brc20::ApiTickInfo,
+      brc20::ApiTickInfos,
+      brc20::ApiBalance,
+      brc20::ApiBalances,
+      brc20::ApiTxEvent,
+      brc20::ApiDeployEvent,
+      brc20::ApiMintEvent,
+      brc20::ApiInscribeTransferEvent,
+      brc20::ApiTransferEvent,
+      brc20::ApiErrorEvent,
+      brc20::ApiTxEvents,
+      brc20::ApiBlockEvents,
       brc20::TransferableInscription,
       brc20::TransferableInscriptions,
 
       // BRC20 responses schemas
-      response::BRC20Tick,
-      response::BRC20AllTick,
-      response::BRC20Balance,
-      response::BRC20AllBalance,
-      response::BRC20TxEvents,
-      response::BRC20BlockEvents,
-      response::BRC20Transferable,
+      response::ApiBRC20Tick,
+      response::ApiBRC20AllTick,
+      response::ApiBRC20Balance,
+      response::ApiBRC20AllBalance,
+      response::ApiBRC20TxEvents,
+      response::ApiBRC20BlockEvents,
+      response::ApiBRC20Transferable,
 
       // Ord schemas
-      ord::OrdInscription,
-      ord::InscriptionDigest,
-      ord::OutPointData,
-      ord::OutPointResult,
-      ord::InscriptionAction,
-      ord::TxInscription,
-      ord::TxInscriptions,
-      ord::BlockInscriptions,
+      ord::ApiInscription,
+      ord::ApiInscriptionDigest,
+      ord::ApiOutpointInscriptions,
+      ord::ApiOutPointResult,
+      ord::ApiInscriptionAction,
+      ord::ApiTxInscription,
+      ord::ApiTxInscriptions,
+      ord::ApiBlockInscriptions,
 
       // Ord responses schemas
-      response::OrdOrdInscription,
-      response::OrdTxInscriptions,
-      response::OrdBlockInscriptions,
-      response::OrdOutPointResult,
+      response::ApiOrdInscription,
+      response::ApiOrdTxInscriptions,
+      response::ApiOrdBlockInscriptions,
+      response::ApiOrdOutPointResult,
 
       // Node Info schemas
       info::NodeInfo,

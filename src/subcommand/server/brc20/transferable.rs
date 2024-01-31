@@ -1,4 +1,9 @@
-use {super::*, crate::okx::datastore::brc20 as brc20_store, axum::Json, utoipa::ToSchema};
+use {
+  super::*,
+  crate::okx::datastore::brc20::{self as brc20_store, Tick},
+  axum::Json,
+  utoipa::ToSchema,
+};
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[schema(as = brc20::TransferableInscription)]
@@ -17,8 +22,8 @@ pub struct TransferableInscription {
   pub owner: String,
 }
 
-impl From<&brc20_store::TransferableLog> for TransferableInscription {
-  fn from(trans: &brc20_store::TransferableLog) -> Self {
+impl From<brc20_store::TransferableLog> for TransferableInscription {
+  fn from(trans: brc20_store::TransferableLog) -> Self {
     Self {
       inscription_id: trans.inscription_id.to_string(),
       inscription_number: trans.inscription_number,
@@ -52,22 +57,27 @@ pub(crate) async fn brc20_transferable(
 ) -> ApiResult<TransferableInscriptions> {
   log::debug!("rpc: get brc20_transferable: {tick} {address}");
 
-  let tick = brc20_store::Tick::from_str(&tick)
-    .map_err(|_| ApiError::bad_request(BRC20Error::IncorrectTickFormat))?;
+  let rtx = index.begin_read()?;
+  let network = index.get_chain_network();
 
-  let address: bitcoin::Address = Address::from_str(&address)
-    .and_then(|address| address.require_network(index.get_chain_network()))
+  let ticker = Tick::from_str(&tick).map_err(|_| BRC20ApiError::InvalidTicker(tick.clone()))?;
+  let script_key = utils::parse_and_validate_script_key_network(&address, network)
     .map_err(ApiError::bad_request)?;
 
-  let transferable = index.brc20_get_tick_transferable_by_address(&tick, &address)?;
+  let transferable_brc20_assets =
+    Index::get_brc20_transferable_utxo_by_tick_and_address(ticker, script_key, &rtx)?
+      .ok_or(BRC20ApiError::UnknownTicker(tick.clone()))?;
 
   log::debug!(
     "rpc: get brc20_transferable: {tick} {address} {:?}",
-    transferable
+    transferable_brc20_assets
   );
 
   Ok(Json(ApiResponse::ok(TransferableInscriptions {
-    inscriptions: transferable.iter().map(|trans| trans.into()).collect(),
+    inscriptions: transferable_brc20_assets
+      .into_iter()
+      .map(|t| t.into())
+      .collect(),
   })))
 }
 
@@ -97,21 +107,23 @@ pub struct TransferableInscriptions {
 )]
 pub(crate) async fn brc20_all_transferable(
   Extension(index): Extension<Arc<Index>>,
-  Path(address): Path<String>,
+  Path(account): Path<String>,
 ) -> ApiResult<TransferableInscriptions> {
-  log::debug!("rpc: get brc20_all_transferable: {address}");
+  log::debug!("rpc: get brc20_all_transferable: {account}");
 
-  let address: bitcoin::Address = Address::from_str(&address)
-    .and_then(|address| address.require_network(index.get_chain_network()))
+  let rtx = index.begin_read()?;
+  let network = index.get_chain_network();
+
+  let script_key = utils::parse_and_validate_script_key_network(&account, network)
     .map_err(ApiError::bad_request)?;
 
-  let transferable = index.brc20_get_all_transferable_by_address(&address)?;
+  let transferable = rtx.brc20_get_all_transferable_by_address(script_key)?;
   log::debug!(
-    "rpc: get brc20_all_transferable: {address} {:?}",
+    "rpc: get brc20_all_transferable: {account} {:?}",
     transferable
   );
 
   Ok(Json(ApiResponse::ok(TransferableInscriptions {
-    inscriptions: transferable.iter().map(|trans| trans.into()).collect(),
+    inscriptions: transferable.into_iter().map(|t| t.into()).collect(),
   })))
 }

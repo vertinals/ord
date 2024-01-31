@@ -71,15 +71,15 @@ where
 }
 
 // BRC20_EVENTS
-pub fn get_transaction_receipts<T>(table: &T, txid: &Txid) -> crate::Result<Vec<Receipt>>
+pub fn get_transaction_receipts<T>(table: &T, txid: &Txid) -> crate::Result<Option<Vec<Receipt>>>
 where
   T: ReadableTable<&'static TxidValue, &'static [u8]>,
 {
-  if let Some(x) = table.get(&txid.store())? {
-    Ok(rmp_serde::from_slice::<Vec<Receipt>>(x.value())?)
-  } else {
-    Ok(vec![])
-  }
+  Ok(
+    table
+      .get(&txid.store())?
+      .map(|x| rmp_serde::from_slice::<Vec<Receipt>>(x.value()).unwrap()),
+  )
 }
 
 // BRC20_TRANSFERABLELOG

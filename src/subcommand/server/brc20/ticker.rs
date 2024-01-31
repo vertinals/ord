@@ -9,7 +9,7 @@ use {
 #[schema(as = brc20::TickInfo)]
 #[serde(rename_all = "camelCase")]
 /// Description of a BRC20 ticker.
-pub struct TickInfo {
+pub struct ApiTickInfo {
   /// Name of the ticker.
   pub tick: String,
   /// Inscription ID of the ticker deployed.
@@ -52,7 +52,7 @@ pub struct TickInfo {
   pub deploy_blocktime: u32,
 }
 
-impl From<TokenInfo> for TickInfo {
+impl From<TokenInfo> for ApiTickInfo {
   fn from(tick_info: TokenInfo) -> Self {
     Self {
       tick: tick_info.tick.to_string(),
@@ -81,21 +81,23 @@ impl From<TokenInfo> for TickInfo {
   ),
     responses(
       (status = 200, description = "Obtain matching BRC20 ticker by query.", body = BRC20Tick),
-      (status = 400, description = "Bad query.", body = ApiError, example = json!(&ApiError::bad_request(BRC20Error::IncorrectTickFormat))),
-      (status = 404, description = "Ticker not found.", body = ApiError, example = json!(&ApiError::not_found(BRC20Error::TickNotFound))),
+      (status = 400, description = "Bad query.", body = ApiError, example = json!(&ApiError::bad_request("bad request"))),
+      (status = 404, description = "Ticker not found.", body = ApiError, example = json!(&ApiError::not_found("not found"))),
       (status = 500, description = "Internal server error.", body = ApiError, example = json!(&ApiError::internal("internal error"))),
     )
   )]
 pub(crate) async fn brc20_tick_info(
   Extension(index): Extension<Arc<Index>>,
   Path(tick): Path<String>,
-) -> ApiResult<TickInfo> {
+) -> ApiResult<ApiTickInfo> {
   log::debug!("rpc: get brc20_tick_info: {}", tick);
-  let tick =
-    Tick::from_str(&tick).map_err(|_| ApiError::bad_request(BRC20Error::IncorrectTickFormat))?;
-  let tick_info = index
-    .brc20_get_tick_info(&tick)?
-    .ok_or_api_not_found(BRC20Error::TickNotFound)?;
+
+  let rtx = index.begin_read()?;
+  let ticker = Tick::from_str(&tick).map_err(|_| BRC20ApiError::InvalidTicker(tick.clone()))?;
+
+  let tick_info = rtx
+    .brc20_get_tick_info(&ticker)?
+    .ok_or(BRC20ApiError::UnknownTicker(tick.clone()))?;
 
   log::debug!("rpc: get brc20_tick_info: {:?} {:?}", tick, tick_info);
 
@@ -105,9 +107,9 @@ pub(crate) async fn brc20_tick_info(
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[schema(as = brc20::AllTickInfo)]
 #[serde(rename_all = "camelCase")]
-pub struct AllTickInfo {
+pub struct ApiTickInfos {
   #[schema(value_type = Vec<brc20::TickInfo>)]
-  pub tokens: Vec<TickInfo>,
+  pub tokens: Vec<ApiTickInfo>,
 }
 
 /// Get all tickers info.
@@ -125,12 +127,14 @@ pub struct AllTickInfo {
   )]
 pub(crate) async fn brc20_all_tick_info(
   Extension(index): Extension<Arc<Index>>,
-) -> ApiResult<AllTickInfo> {
+) -> ApiResult<ApiTickInfos> {
   log::debug!("rpc: get brc20_all_tick_info");
-  let all_tick_info = index.brc20_get_all_tick_info()?;
+
+  let rtx = index.begin_read()?;
+  let all_tick_info = rtx.brc20_get_all_tick_info()?;
   log::debug!("rpc: get brc20_all_tick_info: {:?}", all_tick_info);
 
-  Ok(Json(ApiResponse::ok(AllTickInfo {
+  Ok(Json(ApiResponse::ok(ApiTickInfos {
     tokens: all_tick_info.into_iter().map(|t| t.into()).collect(),
   })))
 }

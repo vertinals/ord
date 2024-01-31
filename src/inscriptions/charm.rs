@@ -72,7 +72,6 @@ impl Charm {
     }
   }
 
-  #[cfg(test)]
   pub(crate) fn charms(charms: u16) -> Vec<Charm> {
     Self::ALL
       .iter()

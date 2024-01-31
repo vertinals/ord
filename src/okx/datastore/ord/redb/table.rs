@@ -58,13 +58,18 @@ where
 }
 
 // ORD_TX_TO_OPERATIONS
-pub fn get_transaction_operations<T>(table: &T, txid: &Txid) -> crate::Result<Vec<InscriptionOp>>
+pub fn get_transaction_operations<T>(
+  table: &T,
+  txid: &Txid,
+) -> crate::Result<Option<Vec<InscriptionOp>>>
 where
   T: ReadableTable<&'static TxidValue, &'static [u8]>,
 {
-  Ok(table.get(&txid.store())?.map_or(Vec::new(), |v| {
-    rmp_serde::from_slice::<Vec<InscriptionOp>>(v.value()).unwrap()
-  }))
+  Ok(
+    table
+      .get(&txid.store())?
+      .map(|v| rmp_serde::from_slice::<Vec<InscriptionOp>>(v.value()).unwrap()),
+  )
 }
 
 // ORD_TX_TO_OPERATIONS
@@ -146,7 +151,7 @@ mod tests {
 
     assert_eq!(
       get_transaction_operations(&table, &txid).unwrap(),
-      vec![operation]
+      Some(vec![operation])
     );
   }
 }
