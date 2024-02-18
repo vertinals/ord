@@ -272,6 +272,7 @@ impl Index {
     let once = Once::new();
     let progress_bar = Mutex::new(None);
 
+    #[allow(clippy::blocks_in_conditions)]
     let database = match Database::builder()
       .set_cache_size(db_cache_size)
       .set_repair_callback(move |progress: &mut RepairSession| {
