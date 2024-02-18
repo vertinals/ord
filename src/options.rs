@@ -93,7 +93,7 @@ pub struct Options {
   #[arg(
     long,
     default_value = "false",
-    help = "Set lru cache to <LRU_SIZE>. By default 10000000"
+    help = "simulate tx flag, default is false"
   )]
   pub(crate) simulate_enable: bool,
   #[arg(long, help = "bitcoin zmq url.")]
