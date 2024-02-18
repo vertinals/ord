@@ -208,16 +208,20 @@ impl Server {
       });
       INDEXER.lock().unwrap().replace(index_thread);
 
-      let client = Arc::new(
-        Client::new(
-          options.rpc_url.as_ref().unwrap().as_ref(),
-          Auth::UserPass(
-            options.bitcoin_rpc_user.as_ref().unwrap().clone(),
-            options.bitcoin_rpc_pass.as_ref().unwrap().clone(),
-          ),
-        )
-        .unwrap(),
-      );
+      let client = if options.simulate_enable {
+        Some(Arc::new(
+          Client::new(
+            options.simulate_bitcoin_rpc_url.as_ref().unwrap().as_ref(),
+            Auth::UserPass(
+              options.simulate_bitcoin_rpc_user.as_ref().unwrap().clone(),
+              options.simulate_bitcoin_rpc_pass.as_ref().unwrap().clone(),
+            ),
+          )
+          .unwrap(),
+        ))
+      } else {
+        None
+      };
 
       #[derive(OpenApi)]
       #[openapi(
@@ -1698,7 +1702,7 @@ impl Server {
   }
 
   async fn simulate_brc20(
-    Extension(client): Extension<Arc<Client>>,
+    Extension(client): Extension<Option<Arc<Client>>>,
     Extension(simulator): Extension<Option<SimulatorServer>>,
     Path(tx_id): Path<Txid>,
   ) -> ApiResult<Vec<Receipt>> {
@@ -1706,7 +1710,7 @@ impl Server {
       return Err(ApiError::Internal("simulator not enabled".to_string()));
     }
 
-    let tx = client.get_raw_transaction(&tx_id, None);
+    let tx = client.unwrap().get_raw_transaction(&tx_id, None);
     if tx.is_err() {
       return Err(ApiError::NotFound("tx not found".to_string()));
     }
