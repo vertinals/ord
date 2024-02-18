@@ -1792,6 +1792,7 @@ mod tests {
         port,
         server_args.join(" "),
       ));
+      println!("options:{:?}",&options);
 
       let index = Arc::new(Index::open(&options).unwrap());
       let ord_server_handle = Handle::new();
