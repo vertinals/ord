@@ -131,7 +131,11 @@ fn ord_get_inscription_by_id(
     .ord_inscription_id_to_collections(inscription_id)?
     .unwrap_or_default();
 
-  let charms = Charm::charms(inscription_entry.charms);
+  let charms: Vec<Charm> = Charm::ALL
+    .iter()
+    .filter(|charm| charm.is_set(inscription_entry.charms))
+    .cloned()
+    .collect();
 
   let location_outpoint = sat_point.outpoint;
 
