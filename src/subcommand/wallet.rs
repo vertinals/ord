@@ -151,7 +151,7 @@ pub(crate) fn get_locked_outputs(client: &Client) -> Result<BTreeSet<OutPoint>> 
 pub(crate) fn get_change_address(client: &Client, chain: Chain) -> Result<Address> {
   Ok(
     client
-      .call::<Address<NetworkUnchecked>>("getrawchangeaddress", &["bech32m".into()])
+      .call::<Address<NetworkUnchecked>>("getrawchangeaddress", &["bech32".into()])
       .context("could not get change addresses from wallet")?
       .require_network(chain.network())?,
   )
@@ -161,7 +161,7 @@ pub(crate) fn initialize(wallet: String, options: &Options, seed: [u8; 64]) -> R
   check_version(options.bitcoin_rpc_client(None)?)?.create_wallet(
     &wallet,
     None,
-    Some(true),
+    Some(false),
     None,
     None,
   )?;
@@ -227,7 +227,7 @@ fn derive_and_import_descriptor(
     active: Some(true),
     range: None,
     next_index: None,
-    internal: Some(change),
+    internal: Some(false),
     label: None,
   })?;
 
