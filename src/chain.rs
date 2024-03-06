@@ -40,7 +40,7 @@ impl Chain {
 
   pub(crate) fn first_inscription_height(self) -> u32 {
     match self {
-      Self::Mainnet => 767430,
+      Self::Mainnet => 2103570,
       Self::Regtest => 0,
       Self::Signet => 112402,
       Self::Testnet => 2413343,
@@ -49,7 +49,7 @@ impl Chain {
 
   pub(crate) fn first_brc20_height(self) -> u32 {
     match self {
-      Self::Mainnet => 779832,
+      Self::Mainnet => 2103570,
       Self::Regtest => 0,
       Self::Signet => 0,
       Self::Testnet => 0,
