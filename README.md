@@ -1,3 +1,7 @@
+✅ Note for Vertcoin:
+- This is hosted [here](https://ord.vertinals.org)
+- Simple helper for inscribing [here](https://inscribe.vertinals.org)
+
 `ord`
 =====
 Forks on [ordinals/ord](https://github.com/ordinals/ord) and adds the [BRC20 Protocol](https://domo-2.gitbook.io/brc-20-experiment/) feature. It can easily call the API, obtaining the BRC20 transaction and tick balance.
