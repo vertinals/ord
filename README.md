@@ -1,6 +1,6 @@
 ✅ Note for Vertcoin:
 - This is hosted [here](https://ord.vertinals.org)
-- Simple helper for inscribing [here](https://inscribe.vertinals.org)
+- Simple helper for inscribing [here](https://inscribe.vertinals.org/inscribe)
 
 `ord`
 =====
