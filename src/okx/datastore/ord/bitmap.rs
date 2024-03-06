@@ -1,6 +1,6 @@
 use {super::*, anyhow::anyhow, regex::Regex};
 
-const BITMAP_KEY: &str = r"BITMAP";
+const BITMAP_KEY: &str = r"VERTMAP";
 
 pub struct District {
   pub number: u32,
@@ -8,7 +8,7 @@ pub struct District {
 
 impl District {
   pub fn parse(bytes: &[u8]) -> Result<Self> {
-    let pattern = r"^(0|[1-9][0-9]*)\.bitmap$";
+    let pattern = r"^(0|[1-9][0-9]*)\.vertmap$";
     // pattern must be validated
     let content = std::str::from_utf8(bytes)?;
     let re = Regex::new(pattern).unwrap();
@@ -33,20 +33,20 @@ mod tests {
 
   #[test]
   fn validate_regex() {
-    let district = District::parse("0.bitmap".as_bytes()).unwrap();
+    let district = District::parse("0.vertmap".as_bytes()).unwrap();
     assert_eq!(district.number, 0);
 
-    let district = District::parse("40.bitmap".as_bytes()).unwrap();
+    let district = District::parse("40.vertmap".as_bytes()).unwrap();
     assert_eq!(district.number, 40);
   }
 
   #[test]
   fn invalidate_regex() {
-    assert!(District::parse(".bitmap".as_bytes()).is_err());
-    assert!(District::parse("bitmap".as_bytes()).is_err());
-    assert!(District::parse("c.bitmap".as_bytes()).is_err());
+    assert!(District::parse(".vertmap".as_bytes()).is_err());
+    assert!(District::parse("vertmap".as_bytes()).is_err());
+    assert!(District::parse("c.vertmap".as_bytes()).is_err());
     assert!(District::parse("111".as_bytes()).is_err());
-    assert!(District::parse("01.bitmap".as_bytes()).is_err());
-    assert!(District::parse((u64::MAX.to_string() + "1.bitmap").as_bytes()).is_err());
+    assert!(District::parse("01.vertmap".as_bytes()).is_err());
+    assert!(District::parse((u64::MAX.to_string() + "1.vertmap").as_bytes()).is_err());
   }
 }
